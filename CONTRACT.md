@@ -183,7 +183,3 @@ project they might have, such as a well-known library in the ecosystem. Each
 example is the short sequence a user would follow: the commands to run in
 the project, and the flake that builds it. It reads like the Quickstart
 applied to a familiar project.
-
-Verification details live in the tests and in CI, where a maintainer looks
-for them: commit hashes, CI run numbers, test counts, timings and fixture
-names.
