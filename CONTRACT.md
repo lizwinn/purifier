@@ -34,19 +34,25 @@ The builder takes these arguments:
 build<Tool>Project {
   src,
   lockFile ? src + "/<tool>-purifier.lock.json",
+  <toolLock> ? src + "/<the build tool's lockfile>",
   fetchers ? { },
   # and the purifier's own arguments
 }
 ```
 
-By default the purifier lockfile lies in the project's tree, next to the
-build tool's own lockfile. A project can instead keep its build external:
-the build tool's own lockfile, such as Cargo.lock or package-lock.json,
-stays in the tree, and everything a purifier adds lives outside it, kept
-by the flake that calls the builder, which passes the purifier lockfile as
-`lockFile`. In an ecosystem with no lockfile of its own, an external build
-keeps the purifier lockfile outside the tree too. A `lockFile` outside
-`src` takes the place of any purifier lockfile in `src`.
+`<toolLock>` is named after the build tool's own lockfile, such as
+`cargoLock` for Cargo.lock, `packageLock` for package-lock.json and
+`denoLock` for deno.lock. A purifier whose build tool has no lockfile of
+its own has no such argument.
+
+By default both lockfiles lie in the project's tree, side by side. A
+project can instead keep its build external: the flake that calls the
+builder keeps the purifier lockfile outside the tree and passes it as
+`lockFile`. That flake can also keep its own copy of the build tool's
+lockfile and pass it as `<toolLock>`, which the build then uses in place
+of the copy in `src`. An external build of a project whose committed
+lockfile is missing, stale or written by another version of the build tool
+builds this way, from its source as published.
 
 `fetchers` is passed unchanged to `fetchEntry` of the `purifier` library,
 and to `tree`. A company mirror or credentials go into `fetchers.fetchurl`,
@@ -71,7 +77,7 @@ Every purifier reads its lockfiles, the build tool's and its own, into one
 attribute set of the same shape, whatever their formats on disk:
 
 ```nix
-lib.<tool>-purifier.readLock { src, lockFile ? ... }
+lib.<tool>-purifier.readLock { src, lockFile ? ..., <toolLock> ? ... }
 # =>
 {
   purifier = "<tool>-purifier";
@@ -142,9 +148,13 @@ Each command finds the purifier lockfile next to the build tool's own
 lockfile. For an external build, it takes `--lockfile <path>` or the
 environment variable `<TOOL>_PURIFIER_LOCKFILE`, such as
 `CARGO_PURIFIER_LOCKFILE`, and either one takes precedence over the
-default. The dev shell of the flake that calls the builder can set the
-variable to the path it passes as `lockFile`, so a developer in that shell
-runs the commands with no flag.
+default. The same goes for the build tool's lockfile, through
+`--tool-lockfile <path>` or `<TOOL>_PURIFIER_TOOL_LOCKFILE`: with either
+one, `lock` and `update` write the build tool's lockfile there and leave
+the copy in the tree as it is, and `lock` starts from the copy in the tree
+when the outside one does not exist yet. The dev shell of the flake that
+calls the builder can set both variables to the paths it passes to the
+builder, so a developer in that shell runs the commands with no flag.
 
 The development loop goes through the build tool's own command, such as
 `cargo build` or `sbt test`, with the locked downloads. Commands that need
