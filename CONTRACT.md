@@ -90,10 +90,11 @@ catch a parse error. `readLock` then fails evaluation with
 `builtins.addErrorContext` naming the command that fixes it, and the
 purifier's commands check the file before Nix reads it.
 
-The builder passes the result to `checkLock` from the purifier library.
-`checkLock` fails evaluation with the problems or with a shape error. The
-builder takes the downloads of one system from `entriesFor`, and its
-`fetches` attribute is the entries of the lock. A tool that reads every
+The builder fails evaluation when the lock has problems, with those
+problems as the message, or when the lock does not have the shape above. It
+fetches only the entries whose `systems` include the system it builds for,
+and the entries that have no `systems`. Its `fetches` attribute is the
+entries of the lock. A tool that reads every
 purifier, such as an SBOM generator, calls `readLock` and reads this one
 shape.
 
