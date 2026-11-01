@@ -64,20 +64,7 @@ in
   fetchbzr ? if pkgs == null then noPkgs "fetchbzr" else pkgs.fetchbzr,
   fetchdarcs ? if pkgs == null then noPkgs "fetchdarcs" else pkgs.fetchdarcs,
   fetchpijul ? if pkgs == null then noPkgs "fetchpijul" else pkgs.fetchpijul,
-  # With CVSREADONLYFS set, cvs writes no lock files into the repository,
-  # so a repository that cannot be written to, such as one in the store,
-  # can be exported too. nixpkgs' fetchcvs builds with structured
-  # attributes, which export only the variables under `env`.
-  fetchcvs ?
-    if pkgs == null then
-      noPkgs "fetchcvs"
-    else
-      args:
-      (pkgs.fetchcvs args).overrideAttrs (old: {
-        env = (old.env or { }) // {
-          CVSREADONLYFS = "1";
-        };
-      }),
+  fetchcvs ? if pkgs == null then noPkgs "fetchcvs" else pkgs.fetchcvs,
   # The packages that the steps after a fetch build with: unpacking an
   # archive, rebuilding a .git directory and writing a Darcs context. A
   # builder written for callPackage passes them by name.
@@ -253,14 +240,31 @@ let
       inherit (checked) hash;
     };
 
-    cvs = fetchcvs (
-      {
-        inherit (checked.cvs) cvsRoot module;
-        inherit (checked) hash;
-      }
-      // lib.optionalAttrs (checked.cvs.tag != null) { inherit (checked.cvs) tag; }
-      // lib.optionalAttrs (checked.cvs.date != null) { inherit (checked.cvs) date; }
-    );
+    # With CVSREADONLYFS set, cvs writes no lock files into the repository,
+    # so a repository that cannot be written to, such as one in the store,
+    # can be exported too. nixpkgs' fetchcvs builds with structured
+    # attributes, which export only the variables under `env`.
+    # A fetcher that returns something other than a derivation is used as
+    # it is.
+    cvs =
+      let
+        fetched = fetchcvs (
+          {
+            inherit (checked.cvs) cvsRoot module;
+            inherit (checked) hash;
+          }
+          // lib.optionalAttrs (checked.cvs.tag != null) { inherit (checked.cvs) tag; }
+          // lib.optionalAttrs (checked.cvs.date != null) { inherit (checked.cvs) date; }
+        );
+      in
+      if fetched ? overrideAttrs then
+        fetched.overrideAttrs (old: {
+          env = (old.env or { }) // {
+            CVSREADONLYFS = "1";
+          };
+        })
+      else
+        fetched;
   };
 in
 fetchers.${kind}

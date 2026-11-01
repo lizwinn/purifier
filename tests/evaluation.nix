@@ -1005,6 +1005,16 @@ let
         )).success;
       expected = false;
     };
+    # A builder written for callPackage passes tree its packages by name.
+    testTreeTakesRunCommandByName = {
+      expr =
+        (purifier.tree {
+          name = "named";
+          entries = [ ];
+          runCommand = name: _: _: { inherit name; };
+        }).name;
+      expected = "named";
+    };
     # A lock with many entries is checked without running out of stack.
     testCheckLockManyEntries = {
       expr =

@@ -160,7 +160,7 @@ fetcher for each kind that downloads: `fetchurl`, `fetchgit`, `fetchhg`,
 fetcher is nixpkgs' own unless it is given. A purifier passes its own
 fetcher in place of one, such as a `fetchurl` that sends credentials. A
 replacement takes the arguments that this library passes to the nixpkgs
-fetcher of the same name. The default `fetchcvs` sets `CVSREADONLYFS`, so
+fetcher of the same name. fetchEntry sets `CVSREADONLYFS` on the `fetchcvs` it is given, so
 cvs writes no lock files into the repository it exports from.
 
 `pkgs` may be left out, for an evaluation without nixpkgs. A file entry is

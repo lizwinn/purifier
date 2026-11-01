@@ -7,7 +7,8 @@
 # evaluation, and so does an entry inside the path of another.
 #
 # The arguments besides `name`, `entries` and `link` go to fetchEntry:
-# `pkgs`, and the fetchers that replace nixpkgs' own.
+# `pkgs`, or the fetchers and packages it takes by name. `tree` builds the
+# directory with `runCommand`, given by name or taken from `pkgs`.
 { lib }:
 let
   entriesLib = import ./entries.nix { inherit lib; };
@@ -61,7 +62,9 @@ let
     "entries"
     "link"
   ];
-  inherit (fetchers) pkgs;
+  runCommand =
+    fetchers.runCommand or fetchers.pkgs.runCommand
+      or (throw "purifier: tree ${toJSON name} needs `runCommand` or `pkgs`");
   fetch = fetchEntry fetchers;
 
   checked = map entriesLib.check entries;
@@ -72,7 +75,7 @@ in
 if problem != null then
   throw problem
 else
-  pkgs.runCommand name
+  runCommand name
     {
       # The links point at their fetches; a copy is no cheaper to fetch
       # from a cache than to make.
