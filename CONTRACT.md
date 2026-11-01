@@ -176,7 +176,7 @@ aarch64-linux, and its CI runs them on both:
 | `conformance-rebuild` | `nix build --rebuild` of a fixture gives the same output. |
 | `conformance-offline` | After `prefetch`, the development loop of a fixture works with no network. |
 | `conformance-update` | `update` on a fixture that pins an old version moves it, and both lockfiles then pass the stale check. |
-| `conformance-external` | A fixture kept external, whose `src` holds only the build tool's own files, builds from a purifier lockfile outside it. |
+| `conformance-external` | A fixture kept external, whose `src` holds only the build tool's own files, builds from a purifier lockfile outside it. Where the build tool has a lockfile, the fixture also builds when the flake replaces that lockfile with one outside `src`. |
 
 A check that needs the network, such as a relock, runs in CI as a job of
 the same name when the sandbox cannot run it.
