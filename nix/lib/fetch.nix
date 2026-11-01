@@ -78,6 +78,14 @@ in
           CVSREADONLYFS = "1";
         };
       }),
+  # The packages that the steps after a fetch build with: unpacking an
+  # archive, rebuilding a .git directory and writing a Darcs context. A
+  # builder written for callPackage passes them by name.
+  runCommand ? pkgs.runCommand or null,
+  unzip ? pkgs.unzip or null,
+  zstd ? pkgs.zstd or null,
+  python3 ? pkgs.python3 or null,
+  writeText ? pkgs.writeText or null,
 }:
 entry:
 let
@@ -86,12 +94,17 @@ let
   name = storeName (baseNameOf checked.path);
   inherit (checked) path;
 
-  # The steps that build with nixpkgs whatever the fetcher: unpacking an
-  # archive, rebuilding a .git directory, and writing a Darcs context.
-  withPkgs =
-    step: value:
-    if pkgs == null then
-      throw "purifier: the ${kind} entry at path ${builtins.toJSON path} needs `pkgs` for ${step}, and fetchEntry was not given it"
+  # A step after the fetch needs the packages it names, given by name or
+  # through `pkgs`.
+  withPackages =
+    step: needed: value:
+    let
+      missing = builtins.filter (name: needed.${name} == null) (builtins.attrNames needed);
+    in
+    if missing != [ ] then
+      throw "purifier: the ${kind} entry at path ${builtins.toJSON path} needs ${
+        lib.concatMapStringsSep ", " (name: "`${name}`") missing
+      } for ${step}, and fetchEntry was given neither them nor `pkgs`"
     else
       value;
 
@@ -101,11 +114,11 @@ let
       mirrors,
       stripTop,
     }:
-    pkgs.runCommand name
+    runCommand name
       {
         nativeBuildInputs = [
-          pkgs.unzip
-          pkgs.zstd
+          unzip
+          zstd
         ];
         src = fetchurl {
           name = storeName (urlBaseName url);
@@ -159,9 +172,9 @@ let
         };
       in
       if checked.git.leaveDotGit then
-        withPkgs "rebuilding its .git directory" pkgs.runCommand name
+        withPackages "rebuilding its .git directory" { inherit runCommand python3; } runCommand name
           {
-            nativeBuildInputs = [ pkgs.python3 ];
+            nativeBuildInputs = [ python3 ];
             inherit checkout;
             inherit (checked.git) rev;
             commitObject = checked.git.commitObject.object;
@@ -181,7 +194,9 @@ let
       else
         checkout;
 
-    archive = withPkgs "unpacking its archive" unpack checked.archive;
+    archive = withPackages "unpacking its archive" {
+      inherit runCommand unzip zstd;
+    } unpack checked.archive;
 
     hg = fetchhg {
       inherit name;
@@ -217,9 +232,9 @@ let
       }
       // lib.optionalAttrs (checked.darcs.rev != null) { inherit (checked.darcs) rev; }
       // lib.optionalAttrs (checked.darcs.context != null) {
-        context =
-          withPkgs "writing its context file" pkgs.writeText "${name}-context"
-            checked.darcs.context;
+        context = withPackages "writing its context file" {
+          inherit writeText;
+        } writeText "${name}-context" checked.darcs.context;
       }
     );
 

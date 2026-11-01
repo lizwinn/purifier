@@ -172,9 +172,12 @@ and a command without nixpkgs share the fetched files. A git entry whose
 `leaveDotGit` is false is fetched with `builtins.fetchGit`, which checks
 the checkout against `hash`; its store path differs from the one that
 nixpkgs' `fetchgit` gives. An inline entry needs no fetcher. Every other
-kind needs `pkgs` or the fetcher of its kind. Unpacking an archive,
-rebuilding a `.git` directory and writing a Darcs context file need
-`pkgs` whatever the fetcher, and fail evaluation without it.
+kind needs `pkgs` or the fetcher of its kind. Unpacking an archive needs
+`runCommand`, `unzip` and `zstd`, rebuilding a `.git` directory needs
+`runCommand` and `python3`, and writing a Darcs context file needs
+`writeText`. `fetchEntry` takes each of them by name, or from `pkgs`, so a
+builder written for `callPackage` passes the packages it takes by name.
+Evaluation fails when an entry needs one that it was not given.
 
 The fetches are named after the last component of the entry's `path`.
 The archive file of an archive entry is named after the last segment of

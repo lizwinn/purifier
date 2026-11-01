@@ -45,8 +45,9 @@ build<Tool>Project {
 `denoLock` for deno.lock. A purifier whose build tool has no lockfile of
 its own has no such argument.
 
-By default both lockfiles lie in the project's tree, side by side, and we
-recommend committing both. A project can instead keep its build external: the flake that calls the
+We recommend committing both lockfiles to the project's repository, and
+the builder and the commands look for them there by default. A project can
+instead keep its build external: the flake that calls the
 builder keeps the purifier lockfile outside the tree and passes it as
 `lockFile`. That flake can also keep its own copy of the build tool's
 lockfile and pass it as `<toolLock>`, which the build then uses in place
