@@ -166,6 +166,12 @@ Every purifier's README has these sections, in this order:
 7. Examples
 8. Credits
 
-The Examples section names a few real projects that CI locks and builds, as
-examples of the purifier at work. It does not present them as a list of the
-projects the purifier has been tried on or works with.
+The Examples section shows a reader how to use the purifier on a real
+project they might have, such as a well-known library in the ecosystem. Each
+example is the short sequence a user would follow: the commands to run in
+the project, and the flake that builds it. It reads like the Quickstart
+applied to a familiar project.
+
+Verification details live in the tests and in CI, where a maintainer looks
+for them: commit hashes, CI run numbers, test counts, timings and fixture
+names.
