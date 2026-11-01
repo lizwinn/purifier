@@ -849,6 +849,43 @@ let
       } "aarch64-linux";
       expected = true;
     };
+    testAdmitsDarwin = {
+      expr = map (filters: admitsFilters filters "aarch64-darwin") [
+        { os = "darwin"; }
+        { os = [ "!darwin" ]; }
+        { os = "linux"; }
+        { cpu = "arm64"; }
+        { cpu = "x64"; }
+      ];
+      expected = [
+        true
+        false
+        false
+        true
+        false
+      ];
+    };
+    # Darwin has no libc family, so npm refuses any libc filter there.
+    testAdmitsDarwinLibc = {
+      expr = map (libc: admitsFilters { inherit libc; } "aarch64-darwin") [
+        null
+        "glibc"
+        [ "!musl" ]
+        [ ]
+        "any"
+      ];
+      expected = [
+        true
+        false
+        false
+        false
+        false
+      ];
+    };
+    testAdmitsDarwinBadLibc = {
+      expr = fails (admitsFilters { libc = 1; } "aarch64-darwin");
+      expected = true;
+    };
     testAdmitsUnknownSystem = {
       expr = fails (admitsFilters { } "x86_64-darwin");
       expected = true;
