@@ -52,8 +52,9 @@ import-from-derivation.
 ## The lockfile
 
 A purifier reuses the build tool's own lockfile wherever it records the
-downloads. It writes its own lockfile, outside the project's tree, only
-for what the build tool's lockfile cannot record. A purifier whose build
+downloads. It writes `<tool>-purifier.lock.json`, next to the build
+tool's lockfile or at the external path, only for what the build tool's
+lockfile cannot record. A purifier whose build
 tool records everything writes no lockfile of its own.
 
 Every purifier lockfile holds a format `version` and a hash of its own
