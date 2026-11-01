@@ -5,6 +5,10 @@ purifier knows them all. The contract covers the Nix interface, the
 commands, the checks and the README. Each purifier's lockfile format stays
 its own, because each one models its own ecosystem.
 
+The contract is the standard every purifier aims for. Where a build tool
+cannot support part of it, the purifier's README states that part and what
+the purifier does instead, in the section the part belongs to.
+
 In this document, `<tool>` is the purifier's tool name as its repository
 names it, such as `cargo` in `cargo-purifier`, and `<Tool>` is the same name
 capitalized, such as `Cargo`.
@@ -112,9 +116,10 @@ Every purifier has these commands. Where the build tool has a plugin
 mechanism, the purifier is a plugin, and the command is a thin wrapper
 around the plugin's task.
 
-- `<tool>-purifier lock` runs the build tool and records the downloads. It
-  keeps the build tool's resolution as it is, writing the build tool's
-  lockfile only where it is missing or incomplete. A relock of an
+- `<tool>-purifier lock` runs the build tool and records the downloads.
+  When the build tool has its own lockfile, `lock` keeps the resolution
+  that lockfile records, and writes the lockfile only where it is missing
+  or incomplete. A relock of an
   unchanged project reproduces the lockfile byte for byte.
 - `<tool>-purifier update [<package>...]` updates every lockfile in one
   run: it re-resolves through the build tool's own update, such as
