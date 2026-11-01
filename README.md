@@ -213,6 +213,20 @@ which is the same store path. Build the fetches first, with `fetchEntry`
 and no `pkgs`. Otherwise `builtins.fetchurl` downloads each file during
 evaluation, from `url` alone.
 
+### `checkLock` and `entriesFor`
+
+```nix
+checkLock lock
+entriesFor system lock
+```
+
+`lock` is the attribute set that every purifier reads its lockfiles into,
+`{ purifier, entries, outputs, problems }`, as CONTRACT.md describes.
+`checkLock` returns the lock when it has that shape, its entries pass the
+entry check and `problems` is empty. Otherwise it fails evaluation, with
+the problems joined by newlines or with the shape error. `entriesFor`
+returns the entries whose `systems` is null or names `system`.
+
 ### `admits`
 
 ```nix

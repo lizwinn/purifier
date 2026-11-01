@@ -53,6 +53,21 @@ let
     inherit hash;
   };
 
+  # A lock in memory with one entry for every system, one for
+  # aarch64-linux and one for x86_64-linux.
+  goodLock = {
+    purifier = "test-purifier";
+    entries = [
+      file
+      (git // { systems = [ "aarch64-linux" ]; })
+      (cvs // { systems = [ "x86_64-linux" ]; })
+    ];
+    outputs = {
+      app = { };
+    };
+    problems = [ ];
+  };
+
   commitObjectSet = {
     object = "dHJlZQ==";
     gitlinks = [
@@ -966,6 +981,31 @@ let
     };
 
     # The root default.nix is the library outside a flake.
+    # The lock in memory.
+    testCheckLockGood = {
+      expr = (purifier.checkLock goodLock).purifier;
+      expected = "test-purifier";
+    };
+    testCheckLockProblems = {
+      expr = fails (purifier.checkLock (goodLock // { problems = [ "run `test-purifier lock`" ]; }));
+      expected = true;
+    };
+    testCheckLockShape = {
+      expr = fails (purifier.checkLock (removeAttrs goodLock [ "outputs" ]));
+      expected = true;
+    };
+    testCheckLockBadEntry = {
+      expr = fails (purifier.checkLock (goodLock // { entries = [ (removeAttrs file [ "hash" ]) ]; }));
+      expected = true;
+    };
+    testEntriesFor = {
+      expr = map (entry: entry.path) (purifier.entriesFor "aarch64-linux" goodLock);
+      expected = [
+        file.path
+        git.path
+      ];
+    };
+
     testRootEntryPoint = {
       expr = builtins.attrNames (import ../default.nix { inherit lib; });
       expected = builtins.attrNames purifier;
