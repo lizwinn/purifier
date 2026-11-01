@@ -1005,6 +1005,21 @@ let
         )).success;
       expected = false;
     };
+    # A lock with many entries is checked without running out of stack.
+    testCheckLockManyEntries = {
+      expr =
+        builtins.length
+          (purifier.checkLock (
+            goodLock
+            // {
+              entries = lib.genList (n: {
+                path = "files/${toString n}.txt";
+                contents = "";
+              }) 50000;
+            }
+          )).entries;
+      expected = 50000;
+    };
     testCheckLockShape = {
       expr = fails (purifier.checkLock (removeAttrs goodLock [ "outputs" ]));
       expected = true;

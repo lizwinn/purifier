@@ -80,7 +80,9 @@ let
     else if problem != null then
       throw "${wrongShape}${problem}"
     else
-      lib.foldr (entry: checked: builtins.seq (entriesLib.check entry) checked) lock lock.entries;
+      # A strict left fold checks each entry in constant stack depth, which a
+      # lock with thousands of entries needs.
+      builtins.foldl' (checked: entry: builtins.seq (entriesLib.check entry) checked) lock lock.entries;
 
   entriesFor =
     system: lock:
