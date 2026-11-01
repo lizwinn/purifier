@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: MIT
+#
+# Runs on x86_64-linux and aarch64-linux: the flake's checks (the tests of
+# the library that need no build, the builds that fetch a real file, git
+# checkout and archive and lay them out as a tree, and the formatting).
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - run: nix flake check -L
