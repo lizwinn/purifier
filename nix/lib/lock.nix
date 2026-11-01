@@ -64,15 +64,21 @@ let
       else
         null;
 
+  # The problems are reported before `entries` is evaluated, because a
+  # purifier may build its entries from a lockfile that its problems say
+  # cannot be read.
   checkLock =
     lock:
     let
       problem = shapeProblem lock;
+      wrongShape = "purifier: ${lock.purifier or "a purifier"} gave a lock of the wrong shape: ";
     in
-    if problem != null then
-      throw "purifier: ${lock.purifier or "a purifier"} gave a lock of the wrong shape: ${problem}"
+    if !(isAttrs lock && lock ? problems && isList lock.problems && all isString lock.problems) then
+      throw "${wrongShape}`problems` is missing or not a list of strings"
     else if lock.problems != [ ] then
       throw (concatStringsSep "\n" lock.problems)
+    else if problem != null then
+      throw "${wrongShape}${problem}"
     else
       lib.foldr (entry: checked: builtins.seq (entriesLib.check entry) checked) lock lock.entries;
 

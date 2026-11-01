@@ -990,6 +990,21 @@ let
       expr = fails (purifier.checkLock (goodLock // { problems = [ "run `test-purifier lock`" ]; }));
       expected = true;
     };
+    # With problems, checkLock fails with them and never evaluates the
+    # entries, which may come from a lockfile that cannot be read.
+    testCheckLockProblemsBeforeEntries = {
+      expr =
+        (builtins.tryEval (
+          purifier.checkLock (
+            goodLock
+            // {
+              entries = throw "unreadable";
+              problems = [ "run `test-purifier lock`" ];
+            }
+          )
+        )).success;
+      expected = false;
+    };
     testCheckLockShape = {
       expr = fails (purifier.checkLock (removeAttrs goodLock [ "outputs" ]));
       expected = true;
