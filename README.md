@@ -165,9 +165,13 @@ cvs writes no lock files into the repository it exports from.
 `pkgs` may be left out, for an evaluation without nixpkgs. A file entry is
 then fetched with Nix's built-in fetcher, and its store path is the store
 path that nixpkgs' `fetchurl` gives it. So a sandboxed build with `pkgs`
-and a command without nixpkgs share the fetched files. An inline entry
-needs no fetcher. Every other kind fails evaluation without `pkgs` or its
-own fetcher.
+and a command without nixpkgs share the fetched files. A git entry whose
+`leaveDotGit` is false is fetched with `builtins.fetchGit`, which checks
+the checkout against `hash`; its store path differs from the one that
+nixpkgs' `fetchgit` gives. An inline entry needs no fetcher. Every other
+kind needs `pkgs` or the fetcher of its kind. Unpacking an archive,
+rebuilding a `.git` directory and writing a Darcs context file need
+`pkgs` whatever the fetcher, and fail evaluation without it.
 
 The fetches are named after the last component of the entry's `path`.
 The archive file of an archive entry is named after the last segment of
