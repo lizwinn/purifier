@@ -11,11 +11,23 @@ capitalized, such as `Cargo`.
 
 ## The builder
 
-A purifier's flake publishes one builder in its library:
+A purifier's flake exports `overlays.default`, which adds one builder,
+`build<Tool>Project`, to the package set, where nixpkgs keeps its own
+builders. The builder is a package for `callPackage`: it takes the packages
+it needs by name, such as `stdenvNoCC` and the purifier's own scope, and
+`build<Tool>Project.override` replaces any of them. A package in an overlay
+takes the builder by name, like any other builder:
 
 ```nix
-lib.<tool>-purifier.build<Tool>Project {
-  pkgs,
+# package.nix
+{ build<Tool>Project }:
+(build<Tool>Project { src = ./.; }).packages.<name>
+```
+
+The builder takes these arguments:
+
+```nix
+build<Tool>Project {
   src,
   lockFile ? src + "/<tool>-purifier.lock.json",
   fetchers ? { },
@@ -116,7 +128,7 @@ around the plugin's task.
   the build's downloads, the test dependencies, the toolchain, and what
   the editor asks for, such as source jars and language-server workers. It
   keeps them alive with a garbage-collector root beside the purifier
-  lockfile. After a prefetch, the everyday loop and the editor work with
+  lockfile. After a prefetch, the development loop and the editor work with
   the network cut off.
 - `<tool>-purifier publish` uploads the `release` that Nix built.
 
@@ -128,7 +140,7 @@ default. The dev shell of the flake that calls the builder can set the
 variable to the path it passes as `lockFile`, so a developer in that shell
 runs the commands with no flag.
 
-The everyday loop goes through the build tool's own command, such as
+The development loop goes through the build tool's own command, such as
 `cargo build` or `sbt test`, with the locked downloads. Commands that need
 a download not in the lock stop with a message that names
 `<tool>-purifier lock`.
@@ -146,7 +158,7 @@ aarch64-linux, and its CI runs them on both:
 | `conformance-malformed` | A lockfile that is not valid fails, naming the command to run. |
 | `conformance-relock` | Relocking a fixture reproduces its lockfile byte for byte. |
 | `conformance-rebuild` | `nix build --rebuild` of a fixture gives the same output. |
-| `conformance-offline` | After `prefetch`, the everyday loop of a fixture works with no network. |
+| `conformance-offline` | After `prefetch`, the development loop of a fixture works with no network. |
 | `conformance-update` | `update` on a fixture that pins an old version moves it, and both lockfiles then pass the stale check. |
 | `conformance-external` | A fixture kept external, whose `src` holds only the build tool's own files, builds from a purifier lockfile outside it. |
 
@@ -158,11 +170,11 @@ the same name when the sandbox cannot run it.
 Every purifier's README has these sections, in this order:
 
 1. Quickstart
-2. Everyday loop
-3. Offline work
+2. Development loop
+3. Working offline
 4. Editor
-5. Errors and fixes
-6. Sources supported and refused
+5. Troubleshooting
+6. Supported language repositories
 7. Examples
 8. Credits
 
