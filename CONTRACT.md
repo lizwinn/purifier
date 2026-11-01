@@ -163,5 +163,9 @@ Every purifier's README has these sections, in this order:
 4. Editor
 5. Errors and fixes
 6. Sources supported and refused
-7. Real-world projects
+7. Examples
 8. Credits
+
+The Examples section names a few real projects that CI locks and builds, as
+examples of the purifier at work. It does not present them as a list of the
+projects the purifier has been tried on or works with.
