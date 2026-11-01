@@ -22,12 +22,12 @@ the purifier's command and plugin. The builder is a package for
 `callPackage` in that scope: it takes the packages it needs by name, such
 as `stdenvNoCC`, and `build<Tool>Project.override` replaces any of them.
 `<tool>-purifier.overrideScope` replaces what everything in the scope
-shares. A package in an overlay takes the scope by name:
+shares. A flake that packages a project, in the project's repository or in
+another one, applies the overlay and calls the builder:
 
 ```nix
-# package.nix
-{ <tool>-purifier }:
-(<tool>-purifier.build<Tool>Project { src = ./.; }).packages.<name>
+packages.${system}.default =
+  (pkgs.<tool>-purifier.build<Tool>Project { src = ./.; }).packages.<name>;
 ```
 
 The builder takes these arguments:
