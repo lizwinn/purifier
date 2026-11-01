@@ -114,8 +114,8 @@ fixes it.
 ## The commands
 
 Every purifier has these commands. Where the build tool has a plugin
-mechanism, the purifier is a plugin, and the command is a thin wrapper
-around the plugin's task.
+mechanism, the purifier is a plugin, and the command should be a thin
+wrapper around the plugin's task.
 
 - `<tool>-purifier lock` runs the build tool and records the downloads.
   When the build tool has its own lockfile, `lock` keeps the resolution
