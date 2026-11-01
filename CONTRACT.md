@@ -49,6 +49,34 @@ The builder's result has these attributes:
 Every attribute name in the result is known at evaluation time, with no
 import-from-derivation.
 
+## The lock in memory
+
+Every purifier reads its lockfiles, the build tool's and its own, into one
+attribute set of the same shape, whatever their formats on disk:
+
+```nix
+lib.<tool>-purifier.readLock { src, lockFile ? ... }
+# =>
+{
+  purifier = "<tool>-purifier";
+  entries = [ /* download entries of the purifier library */ ];
+  outputs = { /* <name> = { ... }, every name known at evaluation */ };
+  problems = [ /* why the lockfiles cannot be used, each naming the fix */ ];
+}
+```
+
+Each entry in `entries` may carry `systems`, a list of Nix systems,
+when it is needed only there. An entry without `systems` is needed
+everywhere. `problems` is empty for a usable lock, and holds a message for
+each stale, tampered, malformed or incomplete lockfile.
+
+The builder passes the result to `checkLock` from the purifier library.
+`checkLock` fails evaluation with the problems or with a shape error. The
+builder takes the downloads of one system from `entriesFor`, and its
+`fetches` attribute is the entries of the lock. A tool that reads every
+purifier, such as an SBOM generator, calls `readLock` and reads this one
+shape.
+
 ## The lockfile
 
 A purifier reuses the build tool's own lockfile wherever it records the
