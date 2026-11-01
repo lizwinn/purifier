@@ -6,7 +6,8 @@ entries. This library turns each entry into a store path, and lays a list
 of entries out as one directory tree. It also holds the platform and wheel
 helpers that more than one purifier needs.
 
-The nix-purifiers family targets x86_64-linux and aarch64-linux.
+The nix-purifiers family targets x86_64-linux and aarch64-linux. Every
+purifier meets the contract in [CONTRACT.md](CONTRACT.md).
 
 ## Use
 
@@ -164,7 +165,9 @@ cvs writes no lock files into the repository it exports from.
 
 `pkgs` may be left out, for an evaluation without nixpkgs. A file entry is
 then fetched with Nix's built-in fetcher, and its store path is the store
-path that nixpkgs' `fetchurl` gives it. So a sandboxed build with `pkgs`
+path that nixpkgs' `fetchurl` gives it. The built-in fetcher downloads
+only from `url` and never tries `mirrors`, so we recommend passing `pkgs`
+wherever an entry's `url` can fail and a mirror would serve it. So a sandboxed build with `pkgs`
 and a command without nixpkgs share the fetched files. A git entry whose
 `leaveDotGit` is false is fetched with `builtins.fetchGit`, which checks
 the checkout against `hash`; its store path differs from the one that

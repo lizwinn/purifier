@@ -5,7 +5,8 @@
 # the arguments that fetchEntry gives nixpkgs' fetchurl for a file entry.
 # A fixed-output store path depends only on the name, the hash and the
 # hash mode, so it is the store path of nixpkgs' fetchurl with the same
-# name and hash.
+# name and hash. Nix's built-in fetcher reads only `url`, so it downloads
+# from the first of `urls` and never from the mirrors after it.
 {
   name,
   urls,
