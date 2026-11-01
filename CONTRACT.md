@@ -96,8 +96,17 @@ Every purifier has these commands. Where the build tool has a plugin
 mechanism, the purifier is a plugin, and the command is a thin wrapper
 around the plugin's task.
 
-- `<tool>-purifier lock` runs the build tool and records the downloads. A
-  relock of an unchanged project reproduces the lockfile byte for byte.
+- `<tool>-purifier lock` runs the build tool and records the downloads. It
+  keeps the build tool's resolution as it is, writing the build tool's
+  lockfile only where it is missing or incomplete. A relock of an
+  unchanged project reproduces the lockfile byte for byte.
+- `<tool>-purifier update [<package>...]` updates every lockfile in one
+  run: it re-resolves through the build tool's own update, such as
+  `cargo update` or `uv lock --upgrade`, and then relocks the purifier
+  lockfile against the result. With package names, it updates only those
+  packages, as the build tool's update does. A build tool with no lockfile
+  of its own re-resolves its version ranges and dynamic versions, and the
+  purifier lockfile is the one lockfile that changes.
 - `<tool>-purifier prefetch` realizes, in the Nix store, everything the
   lockfile lists for the current system that day-to-day development needs:
   the build's downloads, the test dependencies, the toolchain, and what
