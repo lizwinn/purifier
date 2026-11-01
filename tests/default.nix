@@ -23,9 +23,29 @@ let
       rev = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d";
       submodules = false;
       leaveDotGit = false;
+      commitObject = null;
     };
     hash = "sha256-gdkPz7VJ8ZOwJ5oetnuXBXPkkHlOsU7w0PghYjWgpAo=";
   };
+
+  # The same checkout with a .git directory, rebuilt from the raw commit
+  # object of the commit (`git cat-file commit <rev> | base64 -w0`).
+  # `hash` stays the hash of the plain checkout.
+  commitObject = "dHJlZSBiNGVlY2FmYTliZTJmMjAwNmNlMWI3MDlkNjg1N2IwNzA2OWI0NjA4CnBhcmVudCA1NTNjMjA3N2YwZWRjM2Q1ZGM1ZDE3MjYyZjZhYTQ5OGU2OWQ2ZjhlCnBhcmVudCA3NjI5NDEzMThlZTE2ZTU5ZGFiYmFjYjFiNDA0OWVlYzIyZjBkMzAzCmF1dGhvciBUaGUgT2N0b2NhdCA8b2N0b2NhdEBub3doZXJlLmNvbT4gMTMzMTA3NTIxMCAtMDgwMApjb21taXR0ZXIgVGhlIE9jdG9jYXQgPG9jdG9jYXRAbm93aGVyZS5jb20+IDEzMzEwNzUyMTAgLTA4MDAKCk1lcmdlIHB1bGwgcmVxdWVzdCAjNiBmcm9tIFNwYWNlZ2hvc3QvcGF0Y2gtMQoKTmV3IGxpbmUgYXQgZW5kIG9mIGZpbGUu";
+  gitWithDotGit = git // {
+    path = "sources/hello-world-repo";
+    git = git.git // {
+      leaveDotGit = true;
+      inherit commitObject;
+    };
+  };
+
+  # A checkout of a different tree, which a replacement fetchgit serves in
+  # place of the fetch.
+  otherCheckout = runCommand "other-checkout" { } ''
+    mkdir "$out"
+    echo other > "$out/README"
+  '';
 
   # The release tarball of GNU hello 2.12.1, whose single top-level
   # directory is hello-2.12.1.
@@ -47,6 +67,7 @@ let
   entries = [
     file
     git
+    gitWithDotGit
     (archive true)
     (archive false)
     inline
@@ -83,6 +104,43 @@ in
     touch "$out"
   '';
 
+  # The rebuilt repository: HEAD is the locked commit, its tree holds the
+  # files of the checkout, and git finds nothing missing.
+  fetch-git-dot-git =
+    runCommand "purifier-test-fetch-git-dot-git" { nativeBuildInputs = [ pkgs.git ]; }
+      ''
+        export HOME="$TMPDIR"
+        repo=${purifier.fetchEntry { inherit pkgs; } gitWithDotGit}
+        git config --global --add safe.directory "$repo"
+        test "$(git -C "$repo" rev-parse HEAD)" = ${git.git.rev}
+        test "$(git -C "$repo" symbolic-ref HEAD)" = refs/heads/main
+        test "$(git -C "$repo" ls-tree -r --name-only HEAD)" = README
+        test "$(cat "$repo/.git/shallow")" = ${git.git.rev}
+        git -C "$repo" fsck --no-dangling
+        git -C "$repo" --no-pager log --oneline
+        touch "$out"
+      '';
+
+  # A commit object that is not the commit of `rev` fails the build.
+  fetch-git-wrong-commit = pkgs.testers.testBuildFailure (
+    purifier.fetchEntry { inherit pkgs; } (
+      gitWithDotGit
+      // {
+        git = gitWithDotGit.git // {
+          commitObject = builtins.replaceStrings [ "TmV3" ] [ "T2xk" ] commitObject;
+        };
+      }
+    )
+  );
+
+  # A checkout whose tree is not the tree of the commit fails the build.
+  fetch-git-wrong-tree = pkgs.testers.testBuildFailure (
+    purifier.fetchEntry {
+      inherit pkgs;
+      fetchgit = _: otherCheckout;
+    } gitWithDotGit
+  );
+
   fetch-archive = runCommand "purifier-test-fetch-archive" { } ''
     stripped=${purifier.fetchEntry { inherit pkgs; } (archive true)}
     unstripped=${purifier.fetchEntry { inherit pkgs; } (archive false)}
@@ -113,7 +171,7 @@ in
 
   tree-linked = runCommand "purifier-test-tree-linked" { } ''
     t=${tree true}
-    for p in files/README sources/hello-world sources/hello sources/hello-unstripped files/note.txt; do
+    for p in files/README sources/hello-world sources/hello-world-repo sources/hello sources/hello-unstripped files/note.txt; do
       test -L "$t/$p"
     done
     grep -q "Hello World" "$t/files/README"

@@ -19,6 +19,7 @@ let
     fetchfossil = echo;
     fetchbzr = echo;
     fetchdarcs = echo;
+    fetchpijul = echo;
     fetchcvs = echo;
   };
   fetchArgs = purifier.fetchEntry echoFetchers;
@@ -37,6 +38,7 @@ let
       rev = "0123456789abcdef0123456789abcdef01234567";
       submodules = true;
       leaveDotGit = false;
+      commitObject = null;
     };
     inherit hash;
   };
@@ -190,7 +192,7 @@ let
     testUnknownKind = {
       expr = problemSays {
         path = "x";
-        pijul = { };
+        perforce = { };
         inherit hash;
       } "no kind key";
       expected = true;
@@ -209,6 +211,60 @@ let
     };
     testMissingSubField = {
       expr = problemSays (git // { git = removeAttrs git.git [ "leaveDotGit" ]; }) "no `git.leaveDotGit`";
+      expected = true;
+    };
+    testGitDotGit = {
+      expr = entries.problem (
+        git
+        // {
+          git = git.git // {
+            submodules = false;
+            leaveDotGit = true;
+            commitObject = "dHJlZQ==";
+          };
+        }
+      );
+      expected = null;
+    };
+    testGitDotGitWithoutCommit = {
+      expr = problemSays (
+        git
+        // {
+          git = git.git // {
+            submodules = false;
+            leaveDotGit = true;
+          };
+        }
+      ) "`git.commitObject` is null";
+      expected = true;
+    };
+    testGitCommitWithoutDotGit = {
+      expr = problemSays (
+        git
+        // {
+          git = git.git // {
+            commitObject = "dHJlZQ==";
+          };
+        }
+      ) "is not null";
+      expected = true;
+    };
+    testGitDotGitWithSubmodules = {
+      expr = problemSays (
+        git
+        // {
+          git = git.git // {
+            leaveDotGit = true;
+            commitObject = "dHJlZQ==";
+          };
+        }
+      ) "both true";
+      expected = true;
+    };
+    testGitMissingCommitObject = {
+      expr = problemSays (
+        git // { git = removeAttrs git.git [ "commitObject" ]; }
+      ) "no `git.commitObject`";
       expected = true;
     };
     testMistypedField = {
@@ -414,6 +470,30 @@ let
         rev = "abc";
         inherit hash;
       };
+    };
+    testPijulArgs = {
+      expr = fetchArgs {
+        path = "p";
+        pijul = {
+          url = "https://example.org/pijul";
+          rev = "STATE";
+        };
+        inherit hash;
+      };
+      expected = {
+        name = "p";
+        url = "https://example.org/pijul";
+        state = "STATE";
+        inherit hash;
+      };
+    };
+    testPijulMissingRev = {
+      expr = problemSays {
+        path = "p";
+        pijul.url = "https://example.org/pijul";
+        inherit hash;
+      } "no `pijul.rev`";
+      expected = true;
     };
     testCvsArgs = {
       expr = fetchArgs cvs;

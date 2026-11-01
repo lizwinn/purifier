@@ -5,18 +5,21 @@
 #
 #   file     { path, url, mirrors, hash }
 #   inline   { path, contents }
-#   git      { path, git = { url, rev, submodules, leaveDotGit }, hash }
+#   git      { path, git = { url, rev, submodules, leaveDotGit, commitObject }, hash }
 #   archive  { path, archive = { url, mirrors, stripTop }, hash }
 #   hg       { path, hg = { url, rev, subrepos }, hash }
 #   svn      { path, svn = { url, rev, ignoreExternals, ignoreKeywords }, hash }
 #   fossil   { path, fossil = { url, rev }, hash }
 #   bzr      { path, bzr = { url, rev }, hash }
 #   darcs    { path, darcs = { url, rev, context }, hash }
+#   pijul    { path, pijul = { url, rev }, hash }
 #   cvs      { path, cvs = { cvsRoot, module, tag, date }, hash }
 #
 # Every field is required. Of `cvs.tag` and `cvs.date`, and of
 # `darcs.rev` and `darcs.context`, exactly one is a string and the other
-# is null. An entry may carry other top-level fields, such
+# is null. A git entry has a `git.commitObject` string, the raw commit
+# object of `git.rev` in base64, exactly when `git.leaveDotGit` is true,
+# and null otherwise. An entry may carry other top-level fields, such
 # as the `os`, `cpu` and `libc` filters of npm, and the check leaves them
 # alone.
 { lib }:
@@ -96,6 +99,7 @@ let
         rev = string;
         submodules = bool;
         leaveDotGit = bool;
+        commitObject = nullOrString;
       };
     };
     archive = {
@@ -172,6 +176,17 @@ let
         "rev"
         "context"
       ];
+    };
+    pijul = {
+      key = "pijul";
+      fields = {
+        pijul = attrs;
+        hash = string;
+      };
+      sub = {
+        url = string;
+        rev = string;
+      };
     };
     cvs = {
       key = "cvs";
@@ -250,8 +265,21 @@ let
         in
         lib.optional (spec ? oneOf && top == [ ] && sub == [ ] && (set.${a} == null) == (set.${b} == null))
           "exactly one of its `${spec.key}.${a}` and `${spec.key}.${b}` must be a string, and the other null";
+      # The .git directory is rebuilt from the checkout, and a checkout with
+      # submodules does not hold the commits that its tree records for
+      # them.
+      git = lib.optional (kind == "git" && top == [ ] && sub == [ ]) (
+        if entry.git.leaveDotGit && entry.git.commitObject == null then
+          "its `git.leaveDotGit` is true, and its `git.commitObject` is null"
+        else if !entry.git.leaveDotGit && entry.git.commitObject != null then
+          "its `git.leaveDotGit` is false, and its `git.commitObject` is not null"
+        else if entry.git.leaveDotGit && entry.git.submodules then
+          "its `git.leaveDotGit` and its `git.submodules` are both true, and the library rebuilds a .git directory only for a checkout without submodules"
+        else
+          null
+      );
     in
-    top ++ sub ++ oneOf;
+    top ++ sub ++ oneOf ++ filter (p: p != null) git;
 
   # The kind keys an entry has.
   keysOf = entry: filter (key: entry ? ${key}) kindKeys;

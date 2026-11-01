@@ -4,9 +4,13 @@
 #
 #   file     fetchurl from `url`, then from each of `mirrors`
 #   inline   builtins.toFile with `contents`
-#   git      fetchgit at `git.rev`, with submodules when `git.submodules`
-#            is true and the .git directory when `git.leaveDotGit` is true,
-#            so `hash` is the hash that nix-prefetch-git reports
+#   git      fetchgit at `git.rev` without its .git directory, with
+#            submodules when `git.submodules` is true, so `hash` is the
+#            hash that nix-prefetch-git reports for that checkout. When
+#            `git.leaveDotGit` is true, a second derivation (dot-git.py)
+#            adds a shallow .git directory rebuilt from the checkout and
+#            `git.commitObject`; the .git directory that git itself
+#            writes differs from one fetch to the next.
 #   archive  fetchurl of the archive file, whose hash is `hash`, unpacked
 #            in a derivation; with `archive.stripTop` the single top-level
 #            directory of the archive is the result
@@ -18,6 +22,7 @@
 #   bzr      fetchbzr
 #   darcs    fetchdarcs at the tag `darcs.rev`, or at the version that the
 #            text of the context file `darcs.context` names
+#   pijul    fetchpijul at the state `pijul.rev`
 #   cvs      fetchcvs at `cvs.tag` or at `cvs.date`
 #
 # Every fetcher is nixpkgs' by default. A purifier passes its own in place
@@ -40,6 +45,7 @@ in
   fetchfossil ? pkgs.fetchfossil,
   fetchbzr ? pkgs.fetchbzr,
   fetchdarcs ? pkgs.fetchdarcs,
+  fetchpijul ? pkgs.fetchpijul,
   fetchcvs ? pkgs.fetchcvs,
 }:
 entry:
@@ -102,12 +108,35 @@ let
 
     inline = builtins.toFile name checked.contents;
 
-    git = fetchgit {
-      inherit name;
-      inherit (checked.git) url rev leaveDotGit;
-      fetchSubmodules = checked.git.submodules;
-      inherit (checked) hash;
-    };
+    git =
+      let
+        checkout = fetchgit {
+          inherit name;
+          inherit (checked.git) url rev;
+          leaveDotGit = false;
+          fetchSubmodules = checked.git.submodules;
+          inherit (checked) hash;
+        };
+      in
+      if checked.git.leaveDotGit then
+        pkgs.runCommand name
+          {
+            nativeBuildInputs = [ pkgs.python3 ];
+            inherit checkout;
+            inherit (checked.git) rev commitObject;
+            entryPath = path;
+          }
+          ''
+            cp -R --no-preserve=ownership "$checkout" "$out"
+            chmod -R u+w "$out"
+            if ! printf '%s' "$commitObject" | base64 -d > "$TMPDIR/commit" 2> /dev/null; then
+              echo "purifier: the git entry at path \"$entryPath\": its commitObject is not base64" >&2
+              exit 1
+            fi
+            python3 ${./dot-git.py} "$out" "$TMPDIR/commit" "$rev" "$entryPath"
+          ''
+      else
+        checkout;
 
     archive = unpack checked.archive;
 
@@ -148,6 +177,15 @@ let
         context = pkgs.writeText "${name}-context" checked.darcs.context;
       }
     );
+
+    # A Pijul state names the set of changes of a channel, as a commit
+    # does in git; fetchpijul takes it as `state`.
+    pijul = fetchpijul {
+      inherit name;
+      inherit (checked.pijul) url;
+      state = checked.pijul.rev;
+      inherit (checked) hash;
+    };
 
     # nixpkgs' fetchbzr and fetchcvs take no name.
     bzr = fetchbzr {

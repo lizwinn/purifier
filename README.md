@@ -56,13 +56,14 @@ makes an empty component.
 | --- | --- | --- |
 | file | `url` | `{ path, url, mirrors, hash }` |
 | inline | `contents` | `{ path, contents }` |
-| git | `git` | `{ path, git = { url, rev, submodules, leaveDotGit }, hash }` |
+| git | `git` | `{ path, git = { url, rev, submodules, leaveDotGit, commitObject }, hash }` |
 | archive | `archive` | `{ path, archive = { url, mirrors, stripTop }, hash }` |
 | hg | `hg` | `{ path, hg = { url, rev, subrepos }, hash }` |
 | svn | `svn` | `{ path, svn = { url, rev, ignoreExternals, ignoreKeywords }, hash }` |
 | fossil | `fossil` | `{ path, fossil = { url, rev }, hash }` |
 | bzr | `bzr` | `{ path, bzr = { url, rev }, hash }` |
 | darcs | `darcs` | `{ path, darcs = { url, rev, context }, hash }` |
+| pijul | `pijul` | `{ path, pijul = { url, rev }, hash }` |
 | cvs | `cvs` | `{ path, cvs = { cvsRoot, module, tag, date }, hash }` |
 
 - **file** is a file, fetched with `fetchurl` from `url` and then from
@@ -71,9 +72,23 @@ makes an empty component.
 - **inline** is a file whose text is `contents`, made with
   `builtins.toFile`. It needs no download.
 - **git** is a checkout at the commit `rev`, fetched with nixpkgs'
-  `fetchgit`. The checkout has its submodules when `submodules` is true,
-  and its `.git` directory when `leaveDotGit` is true. `hash` is the hash
-  that `nix-prefetch-git` reports for the same options.
+  `fetchgit` without its `.git` directory. The checkout has its submodules
+  when `submodules` is true. `hash` is the hash that `nix-prefetch-git`
+  reports for the checkout without `--leave-dotGit`.
+
+  When `leaveDotGit` is true, `commitObject` is the raw commit object of
+  `rev` in base64, as `git cat-file commit <rev> | base64 -w0` prints it.
+  When `leaveDotGit` is false, `commitObject` is null. The `.git`
+  directory that git writes during a fetch differs from one fetch to the
+  next, so the library rebuilds a shallow `.git` directory in a second
+  derivation. That derivation writes the files and directories of the
+  checkout as loose git objects and writes the recorded commit object. The
+  build fails unless the commit object hashes to `rev` and names the tree
+  written from the checkout. `HEAD` names the branch `main`, which points
+  at `rev`, and `.git/shallow` lists `rev` when the commit has parents.
+  The repository has no index. The library rebuilds a `.git` directory
+  only for a checkout without submodules, so an entry with `leaveDotGit`
+  and `submodules` both true fails evaluation.
 - **archive** is the content of an archive file, as a directory. The file
   is fetched with `fetchurl` from `url` and then from each of `mirrors`,
   and `hash` is the hash of the file. A zip file is unpacked with `unzip`,
@@ -95,6 +110,8 @@ makes an empty component.
   `context`, exactly one is a string and the other is null. `rev` is a
   tag. `context` is the text of a Darcs context file, which the library
   writes to the store and passes to `fetchdarcs` as its `context`.
+- **pijul** is a Pijul checkout of the state `rev`, fetched with
+  `fetchpijul`, which takes it as its `state`.
 - **cvs** is a CVS export of `module` from the repository `cvsRoot`,
   fetched with `fetchcvs`. Of `tag` and `date`, exactly one is a string and
   the other is null.
@@ -115,7 +132,8 @@ fetchEntry { pkgs, fetchurl ? pkgs.fetchurl, fetchgit ? pkgs.fetchgit, ... } ent
 
 The store path of one entry. The first argument takes `pkgs`, and a
 fetcher for each kind that downloads: `fetchurl`, `fetchgit`, `fetchhg`,
-`fetchsvn`, `fetchfossil`, `fetchbzr`, `fetchdarcs` and `fetchcvs`. Each
+`fetchsvn`, `fetchfossil`, `fetchbzr`, `fetchdarcs`, `fetchpijul` and
+`fetchcvs`. Each
 fetcher is nixpkgs' own unless it is given. A purifier passes its own
 fetcher in place of one, such as a `fetchurl` that sends credentials. A
 replacement takes the arguments that this library passes to the nixpkgs
