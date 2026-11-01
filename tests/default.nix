@@ -36,9 +36,57 @@ let
     path = "sources/hello-world-repo";
     git = git.git // {
       leaveDotGit = true;
-      inherit commitObject;
+      commitObject = {
+        object = commitObject;
+        gitlinks = [ ];
+      };
     };
   };
+
+  # A repository with one submodule, nix-test-repo-submodule, which the
+  # tests of nixpkgs' fetchgit use. Its commit object and gitlinks come
+  # from `git cat-file commit <rev> | base64 -w0` and `git ls-tree -r <rev>`.
+  submoduleRepo = submodules: {
+    path = if submodules then "sources/with-submodule" else "sources/without-submodule";
+    git = {
+      url = "https://github.com/pineapplehunter/nix-test-repo-with-submodule";
+      rev = "26473335b84ead88ee0a3b649b1c7fa4a91cfd4a";
+      inherit submodules;
+      leaveDotGit = true;
+      commitObject = {
+        object = "dHJlZSA3YmJjMzE5N2U3MTRiNzFhZDg2M2UxN2YwZTRiNDVhZTU5MmM1NTZlCnBhcmVudCAyNGI3MzhhNDY5MDY0MGZhM2NkMzRhNWEwZTNkYTNmZTc2MGFjZTZhCmF1dGhvciBTaG9nbyBUYWthdGEgPHBlc2hvZ29AZ21haWwuY29tPiAxNjk0NDc4MTMxICswOTAwCmNvbW1pdHRlciBTaG9nbyBUYWthdGEgPHBlc2hvZ29AZ21haWwuY29tPiAxNjk0NDc4MTMxICswOTAwCgphZGQgY29udGVudAo=";
+        gitlinks = [
+          {
+            path = "nix-test-repo-submodule";
+            rev = "3223dfc5e18f5c15e0cb26ea7bdf5f12d215619b";
+          }
+        ];
+      };
+    };
+    hash =
+      if submodules then
+        "sha256-rmP8PQT0wJBopdtr/hsB7Y/L1G+ZPdHC2r9LB05Qrj4="
+      else
+        "sha256-nmRXWeZpqvH69+rSbXZVlluXSN3FODeQyxL/BLVHuy8=";
+  };
+
+  # The checks of a rebuilt repository: HEAD is the locked commit, git
+  # finds nothing missing, and `git status` finds no change.
+  checkRepo = repo: rev: ''
+    repo=${repo}
+    git config --global --add safe.directory "$repo"
+    test "$(git -C "$repo" rev-parse HEAD)" = ${rev}
+    test "$(git -C "$repo" symbolic-ref HEAD)" = refs/heads/main
+    test "$(cat "$repo/.git/shallow")" = ${rev}
+    git -C "$repo" fsck --no-dangling
+    git -C "$repo" --no-pager log --oneline
+    status=$(git -C "$repo" status --porcelain)
+    if [ -n "$status" ]; then
+      echo "git status in $repo:" >&2
+      echo "$status" >&2
+      exit 1
+    fi
+  '';
 
   # A checkout of a different tree, which a replacement fetchgit serves in
   # place of the fetch.
@@ -110,16 +158,43 @@ in
     runCommand "purifier-test-fetch-git-dot-git" { nativeBuildInputs = [ pkgs.git ]; }
       ''
         export HOME="$TMPDIR"
-        repo=${purifier.fetchEntry { inherit pkgs; } gitWithDotGit}
-        git config --global --add safe.directory "$repo"
-        test "$(git -C "$repo" rev-parse HEAD)" = ${git.git.rev}
-        test "$(git -C "$repo" symbolic-ref HEAD)" = refs/heads/main
+        ${checkRepo (purifier.fetchEntry { inherit pkgs; } gitWithDotGit) git.git.rev}
         test "$(git -C "$repo" ls-tree -r --name-only HEAD)" = README
-        test "$(cat "$repo/.git/shallow")" = ${git.git.rev}
-        git -C "$repo" fsck --no-dangling
-        git -C "$repo" --no-pager log --oneline
         touch "$out"
       '';
+
+  # A repository with a submodule, with and without the submodule's
+  # checkout: the index and the tree hold a gitlink at its path.
+  fetch-git-dot-git-submodule =
+    runCommand "purifier-test-fetch-git-dot-git-submodule" { nativeBuildInputs = [ pkgs.git ]; }
+      ''
+        export HOME="$TMPDIR"
+        ${checkRepo (purifier.fetchEntry { inherit pkgs; } (submoduleRepo true))
+          (submoduleRepo true).git.rev
+        }
+        test -n "$(ls -A "$repo/nix-test-repo-submodule")"
+        git -C "$repo" ls-files -s nix-test-repo-submodule | grep -q "^160000 3223dfc5e18f5c15e0cb26ea7bdf5f12d215619b 0"
+        ${checkRepo (purifier.fetchEntry { inherit pkgs; } (submoduleRepo false))
+          (submoduleRepo false).git.rev
+        }
+        test -z "$(ls -A "$repo/nix-test-repo-submodule")"
+        git -C "$repo" ls-files -s nix-test-repo-submodule | grep -q "^160000 3223dfc5e18f5c15e0cb26ea7bdf5f12d215619b 0"
+        touch "$out"
+      '';
+
+  # A gitlink with another commit than the tree records fails the build.
+  fetch-git-wrong-gitlink = pkgs.testers.testBuildFailure (
+    purifier.fetchEntry { inherit pkgs; } (
+      lib.recursiveUpdate (submoduleRepo false) {
+        git.commitObject.gitlinks = [
+          {
+            path = "nix-test-repo-submodule";
+            rev = "0000000000000000000000000000000000000000";
+          }
+        ];
+      }
+    )
+  );
 
   # A commit object that is not the commit of `rev` fails the build.
   fetch-git-wrong-commit = pkgs.testers.testBuildFailure (
@@ -127,7 +202,9 @@ in
       gitWithDotGit
       // {
         git = gitWithDotGit.git // {
-          commitObject = builtins.replaceStrings [ "TmV3" ] [ "T2xk" ] commitObject;
+          commitObject = gitWithDotGit.git.commitObject // {
+            object = builtins.replaceStrings [ "TmV3" ] [ "T2xk" ] commitObject;
+          };
         };
       }
     )

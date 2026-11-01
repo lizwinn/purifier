@@ -53,6 +53,27 @@ let
     inherit hash;
   };
 
+  commitObjectSet = {
+    object = "dHJlZQ==";
+    gitlinks = [
+      {
+        path = "vendor/lib";
+        rev = "3223dfc5e18f5c15e0cb26ea7bdf5f12d215619b";
+      }
+    ];
+  };
+
+  # A git entry with a .git directory, and a commitObject with `changes`.
+  dotGitWith =
+    changes:
+    git
+    // {
+      git = git.git // {
+        leaveDotGit = true;
+        commitObject = commitObjectSet // changes;
+      };
+    };
+
   darcs = {
     url = "https://example.org/darcs";
     rev = null;
@@ -220,7 +241,7 @@ let
           git = git.git // {
             submodules = false;
             leaveDotGit = true;
-            commitObject = "dHJlZQ==";
+            commitObject = commitObjectSet;
           };
         }
       );
@@ -243,22 +264,84 @@ let
         git
         // {
           git = git.git // {
-            commitObject = "dHJlZQ==";
+            commitObject = commitObjectSet;
           };
         }
       ) "is not null";
       expected = true;
     };
+    # A checkout with submodules and a .git directory.
     testGitDotGitWithSubmodules = {
+      expr = entries.problem (dotGitWith { });
+      expected = null;
+    };
+    testGitCommitObjectString = {
+      expr = problemSays (
+        dotGitWith { }
+        // {
+          git = (dotGitWith { }).git // {
+            commitObject = "dHJlZQ==";
+          };
+        }
+      ) "is not null or an attribute set";
+      expected = true;
+    };
+    testGitCommitObjectNoObject = {
       expr = problemSays (
         git
         // {
           git = git.git // {
             leaveDotGit = true;
-            commitObject = "dHJlZQ==";
+            commitObject.gitlinks = [ ];
           };
         }
-      ) "both true";
+      ) "no `git.commitObject.object`";
+      expected = true;
+    };
+    testGitCommitObjectNoGitlinks = {
+      expr = problemSays (
+        git
+        // {
+          git = git.git // {
+            leaveDotGit = true;
+            commitObject.object = "dHJlZQ==";
+          };
+        }
+      ) "no `git.commitObject.gitlinks`";
+      expected = true;
+    };
+    testGitlinkShortRev = {
+      expr = problemSays (dotGitWith {
+        gitlinks = [
+          {
+            path = "vendor/lib";
+            rev = "3223dfc";
+          }
+        ];
+      }) "`git.commitObject.gitlinks.0.rev` is not a SHA-1";
+      expected = true;
+    };
+    testGitlinkAbsolutePath = {
+      expr = problemSays (dotGitWith {
+        gitlinks = [
+          {
+            path = "/vendor/lib";
+            rev = "3223dfc5e18f5c15e0cb26ea7bdf5f12d215619b";
+          }
+        ];
+      }) "`git.commitObject.gitlinks.0.path` is absolute";
+      expected = true;
+    };
+    testGitlinkNoRev = {
+      expr = problemSays (dotGitWith {
+        gitlinks = [ { path = "vendor/lib"; } ];
+      }) "no `git.commitObject.gitlinks.0.rev`";
+      expected = true;
+    };
+    testGitlinkTwice = {
+      expr = problemSays (dotGitWith {
+        gitlinks = commitObjectSet.gitlinks ++ commitObjectSet.gitlinks;
+      }) "more than once";
       expected = true;
     };
     testGitMissingCommitObject = {

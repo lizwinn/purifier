@@ -76,19 +76,27 @@ makes an empty component.
   when `submodules` is true. `hash` is the hash that `nix-prefetch-git`
   reports for the checkout without `--leave-dotGit`.
 
-  When `leaveDotGit` is true, `commitObject` is the raw commit object of
-  `rev` in base64, as `git cat-file commit <rev> | base64 -w0` prints it.
-  When `leaveDotGit` is false, `commitObject` is null. The `.git`
-  directory that git writes during a fetch differs from one fetch to the
-  next, so the library rebuilds a shallow `.git` directory in a second
-  derivation. That derivation writes the files and directories of the
-  checkout as loose git objects and writes the recorded commit object. The
-  build fails unless the commit object hashes to `rev` and names the tree
-  written from the checkout. `HEAD` names the branch `main`, which points
-  at `rev`, and `.git/shallow` lists `rev` when the commit has parents.
-  The repository has no index. The library rebuilds a `.git` directory
-  only for a checkout without submodules, so an entry with `leaveDotGit`
-  and `submodules` both true fails evaluation.
+  When `leaveDotGit` is false, `commitObject` is null. When `leaveDotGit`
+  is true, `commitObject` is `{ object, gitlinks }`. `object` is the raw
+  commit object of `rev` in base64, as
+  `git cat-file commit <rev> | base64 -w0` prints it. `gitlinks` lists
+  each submodule of the commit's tree as `{ path, rev }`, from the lines of
+  mode 160000 that `git ls-tree -r <rev>` prints, and it is empty for a
+  commit with no submodules. Each gitlink `rev` is a full SHA-1, and each
+  gitlink `path` follows the rules of an entry's `path`.
+
+  The `.git` directory that git writes during a fetch differs from one
+  fetch to the next, so the library rebuilds a shallow `.git` directory in
+  a second derivation. That derivation writes the files and directories of
+  the checkout as loose git objects. At each gitlink path it writes a
+  gitlink with the recorded commit instead of the directory, whether the
+  checkout holds the submodule there or an empty directory. It then writes
+  the recorded commit object. The build fails unless the commit object
+  hashes to `rev` and names the tree written from the checkout. `HEAD`
+  names the branch `main`, which points at `rev`, and `.git/shallow` lists
+  `rev` when the commit has parents. The index lists every file, link and
+  gitlink of the tree with zero stat data, so `git status` compares file
+  contents and finds no change.
 - **archive** is the content of an archive file, as a directory. The file
   is fetched with `fetchurl` from `url` and then from each of `mirrors`,
   and `hash` is the hash of the file. A zip file is unpacked with `unzip`,

@@ -17,9 +17,11 @@
 #
 # Every field is required. Of `cvs.tag` and `cvs.date`, and of
 # `darcs.rev` and `darcs.context`, exactly one is a string and the other
-# is null. A git entry has a `git.commitObject` string, the raw commit
-# object of `git.rev` in base64, exactly when `git.leaveDotGit` is true,
-# and null otherwise. An entry may carry other top-level fields, such
+# is null. A git entry has a `git.commitObject` exactly when
+# `git.leaveDotGit` is true, and null otherwise. It is
+# `{ object, gitlinks }`: `object` is the raw commit object of `git.rev`
+# in base64, and `gitlinks` lists the submodules of the commit's tree as
+# `{ path, rev }`. An entry may carry other top-level fields, such
 # as the `os`, `cpu` and `libc` filters of npm, and the check leaves them
 # alone.
 { lib }:
@@ -56,6 +58,10 @@ let
   attrs = {
     test = isAttrs;
     description = "an attribute set";
+  };
+  nullOrAttrs = {
+    test = v: v == null || isAttrs v;
+    description = "null or an attribute set";
   };
   nullOrString = {
     test = v: v == null || isString v;
@@ -99,7 +105,7 @@ let
         rev = string;
         submodules = bool;
         leaveDotGit = bool;
-        commitObject = nullOrString;
+        commitObject = nullOrAttrs;
       };
     };
     archive = {
@@ -245,6 +251,52 @@ let
     lib.optional (missing != [ ]) "it has no ${quoted (map (f: prefix + f) missing)}"
     ++ map (field: "its `${prefix}${field}` is not ${table.${field}.description}") mistyped;
 
+  # A gitlink names a submodule commit by its full SHA-1.
+  gitlinkTable = {
+    path = string;
+    rev = {
+      test = v: isString v && builtins.match "[0-9a-f]{40}" v != null;
+      description = "a SHA-1 of 40 lowercase hexadecimal digits";
+    };
+  };
+
+  # The problem with a `git.commitObject` set, or null.
+  commitObjectProblem =
+    commitObject:
+    let
+      own = fieldProblems "git.commitObject." {
+        object = string;
+        gitlinks = {
+          test = v: isList v && all isAttrs v;
+          description = "a list of attribute sets";
+        };
+      } commitObject;
+      links = lib.imap0 (
+        n: link:
+        let
+          prefix = "git.commitObject.gitlinks.${toString n}.";
+          fields = fieldProblems prefix gitlinkTable link;
+          pathIssue = pathProblem link.path;
+        in
+        if fields != [ ] then
+          concatStringsSep "; " fields
+        else if pathIssue != null then
+          builtins.replaceStrings [ "`path`" ] [ "`${prefix}path`" ] pathIssue
+        else
+          null
+      ) commitObject.gitlinks;
+      linkIssues = filter (p: p != null) links;
+      paths = map (link: link.path) commitObject.gitlinks;
+    in
+    if own != [ ] then
+      concatStringsSep "; " own
+    else if linkIssues != [ ] then
+      concatStringsSep "; " linkIssues
+    else if lib.length (lib.unique paths) != length paths then
+      "its `git.commitObject.gitlinks` list a path more than once"
+    else
+      null;
+
   kindProblems =
     kind: entry:
     let
@@ -265,18 +317,17 @@ let
         in
         lib.optional (spec ? oneOf && top == [ ] && sub == [ ] && (set.${a} == null) == (set.${b} == null))
           "exactly one of its `${spec.key}.${a}` and `${spec.key}.${b}` must be a string, and the other null";
-      # The .git directory is rebuilt from the checkout, and a checkout with
-      # submodules does not hold the commits that its tree records for
-      # them.
+      # The .git directory is rebuilt from the checkout, the commit object
+      # and the gitlinks.
       git = lib.optional (kind == "git" && top == [ ] && sub == [ ]) (
         if entry.git.leaveDotGit && entry.git.commitObject == null then
           "its `git.leaveDotGit` is true, and its `git.commitObject` is null"
         else if !entry.git.leaveDotGit && entry.git.commitObject != null then
           "its `git.leaveDotGit` is false, and its `git.commitObject` is not null"
-        else if entry.git.leaveDotGit && entry.git.submodules then
-          "its `git.leaveDotGit` and its `git.submodules` are both true, and the library rebuilds a .git directory only for a checkout without submodules"
-        else
+        else if entry.git.commitObject == null then
           null
+        else
+          commitObjectProblem entry.git.commitObject
       );
     in
     top ++ sub ++ oneOf ++ filter (p: p != null) git;

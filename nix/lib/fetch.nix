@@ -8,9 +8,10 @@
 #            submodules when `git.submodules` is true, so `hash` is the
 #            hash that nix-prefetch-git reports for that checkout. When
 #            `git.leaveDotGit` is true, a second derivation (dot-git.py)
-#            adds a shallow .git directory rebuilt from the checkout and
-#            `git.commitObject`; the .git directory that git itself
-#            writes differs from one fetch to the next.
+#            adds a shallow .git directory rebuilt from the checkout, the
+#            commit object `git.commitObject.object` and the submodule
+#            commits `git.commitObject.gitlinks`; the .git directory that
+#            git itself writes differs from one fetch to the next.
 #   archive  fetchurl of the archive file, whose hash is `hash`, unpacked
 #            in a derivation; with `archive.stripTop` the single top-level
 #            directory of the archive is the result
@@ -123,17 +124,20 @@ let
           {
             nativeBuildInputs = [ pkgs.python3 ];
             inherit checkout;
-            inherit (checked.git) rev commitObject;
+            inherit (checked.git) rev;
+            commitObject = checked.git.commitObject.object;
+            gitlinks = builtins.toJSON checked.git.commitObject.gitlinks;
+            passAsFile = [ "gitlinks" ];
             entryPath = path;
           }
           ''
             cp -R --no-preserve=ownership "$checkout" "$out"
             chmod -R u+w "$out"
             if ! printf '%s' "$commitObject" | base64 -d > "$TMPDIR/commit" 2> /dev/null; then
-              echo "purifier: the git entry at path \"$entryPath\": its commitObject is not base64" >&2
+              echo "purifier: the git entry at path \"$entryPath\": its commitObject.object is not base64" >&2
               exit 1
             fi
-            python3 ${./dot-git.py} "$out" "$TMPDIR/commit" "$rev" "$entryPath"
+            python3 ${./dot-git.py} "$out" "$TMPDIR/commit" "$gitlinksPath" "$rev" "$entryPath"
           ''
       else
         checkout;
