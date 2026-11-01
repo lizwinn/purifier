@@ -56,8 +56,15 @@ in
   fetchpijul ? pkgs.fetchpijul,
   # With CVSREADONLYFS set, cvs writes no lock files into the repository,
   # so a repository that cannot be written to, such as one in the store,
-  # can be exported too.
-  fetchcvs ? args: (pkgs.fetchcvs args).overrideAttrs { CVSREADONLYFS = "1"; },
+  # can be exported too. nixpkgs' fetchcvs builds with structured
+  # attributes, which export only the variables under `env`.
+  fetchcvs ?
+    args:
+    (pkgs.fetchcvs args).overrideAttrs (old: {
+      env = (old.env or { }) // {
+        CVSREADONLYFS = "1";
+      };
+    }),
 }:
 entry:
 let

@@ -906,6 +906,12 @@ let
       };
       expected = builtins.toFile "note.txt" "a note\n";
     };
+    # The default fetchcvs exports CVSREADONLYFS to cvs. Under structured
+    # attributes only the variables under `env` reach the builder.
+    testFetchCvsReadOnly = {
+      expr = (purifier.fetchEntry { inherit pkgs; } cvs).drvAttrs.env.CVSREADONLYFS or null;
+      expected = "1";
+    };
     testFetchGitWithoutPkgs = {
       expr = fails (purifier.fetchEntry { } git);
       expected = true;
