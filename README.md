@@ -37,6 +37,20 @@ The flake's `lib` output is the whole library, and the functions are under
 A flake on the caisson layout lists `purifier` in its `projects`, and its
 library then has `lib.purifier`.
 
+An evaluation outside a flake, such as the `nix-build` that a purifier's
+command runs, imports the root `default.nix` of the library's source with
+a nixpkgs library. The result is the attribute set that the flake has as
+`lib.purifier`:
+
+```nix
+purifier = import "${purifierSource}" { inherit lib; };
+```
+
+A purifier takes `purifierSource` from its own flake.lock, so its command
+and its flake use the same revision of the library. We recommend
+importing only the root `default.nix`, because the layout of the files
+under `nix/` can change.
+
 ## Entries
 
 An entry is an attribute set. Its kind is decided by which kind key it has,
@@ -135,7 +149,7 @@ names the path of the entry.
 ### `fetchEntry`
 
 ```nix
-fetchEntry { pkgs, fetchurl ? pkgs.fetchurl, fetchgit ? pkgs.fetchgit, ... } entry
+fetchEntry { pkgs ? null, fetchurl ? pkgs.fetchurl, fetchgit ? pkgs.fetchgit, ... } entry
 ```
 
 The store path of one entry. The first argument takes `pkgs`, and a
@@ -145,7 +159,15 @@ fetcher for each kind that downloads: `fetchurl`, `fetchgit`, `fetchhg`,
 fetcher is nixpkgs' own unless it is given. A purifier passes its own
 fetcher in place of one, such as a `fetchurl` that sends credentials. A
 replacement takes the arguments that this library passes to the nixpkgs
-fetcher of the same name.
+fetcher of the same name. The default `fetchcvs` sets `CVSREADONLYFS`, so
+cvs writes no lock files into the repository it exports from.
+
+`pkgs` may be left out, for an evaluation without nixpkgs. A file entry is
+then fetched with Nix's built-in fetcher, and its store path is the store
+path that nixpkgs' `fetchurl` gives it. So a sandboxed build with `pkgs`
+and a command without nixpkgs share the fetched files. An inline entry
+needs no fetcher. Every other kind fails evaluation without `pkgs` or its
+own fetcher.
 
 The fetches are named after the last component of the entry's `path`.
 The archive file of an archive entry is named after the last segment of
@@ -164,6 +186,25 @@ behind symbolic links. `pkgs` and the fetchers go to `fetchEntry`.
 
 Two entries at the same path fail evaluation, and so does an entry whose
 path lies inside the path of another entry.
+
+### `manifest`
+
+```nix
+manifest { name, entries }
+```
+
+A store file named `name`, made with `builtins.toFile` and without
+nixpkgs. It holds a JSON object that maps the `path` of each entry to its
+store path. `entries` holds file and inline entries, and any other kind
+fails evaluation. The file refers to every store path it names, so one
+garbage-collector root on it keeps the fetched files alive.
+
+A file made with `builtins.toFile` cannot refer to the output of a
+derivation. So the manifest names each file entry through
+`builtins.fetchurl`, with the name and hash that `fetchEntry` gives it,
+which is the same store path. Build the fetches first, with `fetchEntry`
+and no `pkgs`. Otherwise `builtins.fetchurl` downloads each file during
+evaluation, from `url` alone.
 
 ### `admits`
 

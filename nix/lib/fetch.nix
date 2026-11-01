@@ -29,17 +29,24 @@
 # Every fetcher is nixpkgs' by default. A purifier passes its own in place
 # of one, such as a fetchurl that sends credentials; a replacement takes
 # the arguments that the nixpkgs fetcher of its name takes here.
+#
+# `pkgs` may be left out. A file entry is then fetched with Nix's built-in
+# fetcher (builtin-fetchurl.nix), whose store path is the store path that
+# nixpkgs' fetchurl gives the same name and hash. An inline entry needs no
+# fetcher. Every other kind fails evaluation without `pkgs` or its own
+# fetcher.
 { lib }:
 let
   entries = import ./entries.nix { inherit lib; };
   inherit (entries) storeName;
+  builtinFetchurl = import ./builtin-fetchurl.nix;
 
   # The last segment of a URL, without its query or fragment.
   urlBaseName = url: baseNameOf (builtins.head (builtins.split "[?#]" url));
 in
 {
-  pkgs,
-  fetchurl ? pkgs.fetchurl,
+  pkgs ? null,
+  fetchurl ? if pkgs == null then builtinFetchurl else pkgs.fetchurl,
   fetchgit ? pkgs.fetchgit,
   fetchhg ? pkgs.fetchhg,
   fetchsvn ? pkgs.fetchsvn,
@@ -47,7 +54,10 @@ in
   fetchbzr ? pkgs.fetchbzr,
   fetchdarcs ? pkgs.fetchdarcs,
   fetchpijul ? pkgs.fetchpijul,
-  fetchcvs ? pkgs.fetchcvs,
+  # With CVSREADONLYFS set, cvs writes no lock files into the repository,
+  # so a repository that cannot be written to, such as one in the store,
+  # can be exported too.
+  fetchcvs ? args: (pkgs.fetchcvs args).overrideAttrs { CVSREADONLYFS = "1"; },
 }:
 entry:
 let
@@ -55,6 +65,14 @@ let
   kind = entries.kindOf checked;
   name = storeName (baseNameOf checked.path);
   inherit (checked) path;
+
+  # Every kind but file and inline builds with nixpkgs.
+  needsPkgs =
+    !builtins.elem kind [
+      "file"
+      "inline"
+    ];
+  pkgsProblem = "purifier: the ${kind} entry at path ${builtins.toJSON path} needs `pkgs`, which fetchEntry was not given";
 
   unpack =
     {
@@ -207,4 +225,4 @@ let
     );
   };
 in
-fetchers.${kind}
+if needsPkgs && pkgs == null then throw pkgsProblem else fetchers.${kind}

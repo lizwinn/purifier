@@ -145,6 +145,23 @@ in
     touch "$out"
   '';
 
+  # A file fetched with Nix's built-in fetcher, and the manifest that names
+  # it: the manifest maps the entry's path to the same store path.
+  fetch-file-without-pkgs = runCommand "purifier-test-fetch-file-without-pkgs" { } ''
+    fetched=${purifier.fetchEntry { } file}
+    grep -q "Hello World" "$fetched"
+    manifest=${
+      purifier.manifest {
+        name = "manifest.json";
+        entries = [ file ];
+      }
+    }
+    test "$(sed "s|$fetched|@fetched@|" "$manifest")" = ${
+      lib.escapeShellArg (builtins.toJSON { ${file.path} = "@fetched@"; })
+    }
+    touch "$out"
+  '';
+
   fetch-git = runCommand "purifier-test-fetch-git" { } ''
     src=${purifier.fetchEntry { inherit pkgs; } git}
     grep -q "Hello World" "$src/README"

@@ -892,6 +892,58 @@ let
       expr = fails (wheelName "fast-1.0-cp314-cp314-macosx_14_0_arm64.whl");
       expected = true;
     };
+
+    # Without `pkgs`, a file entry is fetched with Nix's built-in fetcher,
+    # at the store path that nixpkgs' fetchurl gives it.
+    testFetchFileWithoutPkgs = {
+      expr = (purifier.fetchEntry { } file).outPath;
+      expected = (purifier.fetchEntry { inherit pkgs; } file).outPath;
+    };
+    testFetchInlineWithoutPkgs = {
+      expr = purifier.fetchEntry { } {
+        path = "files/note.txt";
+        contents = "a note\n";
+      };
+      expected = builtins.toFile "note.txt" "a note\n";
+    };
+    testFetchGitWithoutPkgs = {
+      expr = fails (purifier.fetchEntry { } git);
+      expected = true;
+    };
+
+    # The manifest's text refers to the store paths it names, and
+    # fromJSON refuses such a string, so the test compares the text.
+    testManifestInline = {
+      expr = builtins.readFile (
+        purifier.manifest {
+          name = "manifest.json";
+          entries = [
+            {
+              path = "files/note.txt";
+              contents = "a note\n";
+            }
+          ];
+        }
+      );
+      expected = builtins.toJSON {
+        "files/note.txt" = builtins.toFile "note.txt" "a note\n";
+      };
+    };
+    testManifestRefusesGit = {
+      expr = fails (
+        purifier.manifest {
+          name = "manifest.json";
+          entries = [ git ];
+        }
+      );
+      expected = true;
+    };
+
+    # The root default.nix is the library outside a flake.
+    testRootEntryPoint = {
+      expr = builtins.attrNames (import ../default.nix { inherit lib; });
+      expected = builtins.attrNames purifier;
+    };
   };
 
   failures = lib.debug.runTests tests;
