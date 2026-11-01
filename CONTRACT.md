@@ -197,8 +197,27 @@ Every purifier's README has these sections, in this order:
 7. Examples
 8. Credits
 
+The Quickstart locks a project and builds it with Nix from the project's
+directory, with no Nix file added to the project:
+
+```zsh
+nix build --impure --expr '
+  let
+    purifier = builtins.getFlake "github:nix-purifiers/<tool>-purifier";
+    pkgs = import purifier.inputs.nixpkgs {
+      system = builtins.currentSystem;
+      overlays = [ purifier.overlays.default ];
+    };
+  in
+  (pkgs.<tool>-purifier.build<Tool>Project { src = ./.; }).packages.<name>'
+```
+
+The README then shows the flake that packages the project, for a project
+whose authors want one. The flake can live in the project's repository or in
+another one.
+
 The Examples section shows a reader how to use the purifier on a real
 project they might have, such as a well-known library in the ecosystem. Each
 example is the short sequence a user would follow: the commands to run in
-the project, and the flake that builds it. It reads like the Quickstart
+the project and the build from its directory. It reads like the Quickstart
 applied to a familiar project.
