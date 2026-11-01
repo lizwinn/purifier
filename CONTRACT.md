@@ -68,7 +68,11 @@ lib.<tool>-purifier.readLock { src, lockFile ? ... }
 Each entry in `entries` may carry `systems`, a list of Nix systems,
 when it is needed only there. An entry without `systems` is needed
 everywhere. `problems` is empty for a usable lock, and holds a message for
-each stale, tampered, malformed or incomplete lockfile.
+each stale, tampered, malformed or incomplete lockfile. A lockfile that is
+not valid JSON or TOML at all cannot become a problem, because Nix cannot
+catch a parse error. `readLock` then fails evaluation with
+`builtins.addErrorContext` naming the command that fixes it, and the
+purifier's commands check the file before Nix reads it.
 
 The builder passes the result to `checkLock` from the purifier library.
 `checkLock` fails evaluation with the problems or with a shape error. The
