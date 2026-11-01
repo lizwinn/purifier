@@ -13,6 +13,40 @@ In this document, `<tool>` is the purifier's tool name as its repository
 names it, such as `cargo` in `cargo-purifier`, and `<Tool>` is the same name
 capitalized, such as `Cargo`.
 
+## The user workflow
+
+The entry point is the developer's existing build-tool workflow with a
+lockfile and Nix-resolved dependencies. The developer installs the
+purifier's native plugin where the tool supports it, or activates its
+wrapper, hook, cache or environment integration, then locks the project
+and runs normal build, test and editor commands. Those development
+commands run outside the Nix sandbox against the prepared dependencies.
+Dependency packages may themselves need Nix builds.
+
+Building the project itself in the Nix sandbox is an optional next step.
+At that point, recommend a Nix build definition in the project's source
+tree or in an external packaging repository. Both paths consume the same
+lockfiles. A project Nix definition is not a prerequisite for the native
+development workflow.
+
+A native plugin should have a native installation path. A purifier may
+serve its ecosystem's packages through its own GitHub Pages repository,
+as sbt-purifier serves Maven artifacts. Document which installation paths
+are published and usable; a Pages site alone is not a package release.
+When the tool has no suitable plugin interface, document the wrapper or
+prefetch setup its normal commands require.
+
+Wrappers must be installable, with the exact package and activation steps
+in the README. A wrapper can be required when the native tool has no better
+integration path; say so explicitly. Installing a wrapper must not require
+adopting lockfiles in every project. With no applicable lockfile, print a
+warning on standard error and delegate to the normal tool with its ordinary
+impure resolution, preserving arguments, standard streams and exit status.
+Do not create a purifier lock as a side effect of an unlocked native command.
+An existing invalid or stale lock is an error, rather than an excuse to
+silently switch to impure resolution. Explicit dependency-update commands
+and documented opt-out settings may deliberately use the network.
+
 ## The builder
 
 A purifier's flake exports `overlays.default`, which adds one attribute to
@@ -197,41 +231,27 @@ Every purifier's README has these sections, in this order:
 7. Examples
 8. Credits
 
-The Quickstart locks a project and builds it with Nix from the project's
-directory, with no Nix file added to the project. The following form uses
-the purifier's pinned nixpkgs, so its toolchain matches the lock command:
+The Quickstart installs or activates the integration, locks the project,
+and runs the build tool's normal development commands on Nix-resolved
+dependencies. Show the actual plugin declaration, wrapper activation,
+prefetch or environment setup that those commands need. State what runs
+locally and what Nix realizes. Do not imply that an unconfigured stock
+tool uses the Nix-resolved dependencies.
 
-```zsh
-nix build --impure --expr '
-  let
-    purifier = builtins.getFlake "github:nix-purifiers/<tool>-purifier";
-    pkgs = import purifier.inputs.nixpkgs {
-      system = builtins.currentSystem;
-      overlays = [ purifier.overlays.default ];
-    };
-  in
-  (pkgs.<tool>-purifier.build<Tool>Project { src = ./.; }).packages.<name>'
-```
+The Development loop continues with ordinary build, test and editor
+commands and explains how to relock after dependency changes. Examples
+lead with that same workflow on a real project.
 
-`builtins.getFlake` loads the purifier's overlay; it does not require a
-`flake.nix` in the project. A user can also build with ambient `<nixpkgs>`
-by replacing `import purifier.inputs.nixpkgs` with `import <nixpkgs>`,
-resolved through the user's Nix search path. The README explains both
-choices. A lockfile that records toolchain versions needs compatible
-versions at build time: use the purifier command from the ambient package
-set to lock, or pass a compatible toolchain to the builder.
+An optional "Building the project with Nix" section follows the native
+workflow. Recommend a flake or another Nix definition in the source tree,
+or an externalized build, and show how it calls the builder with the same
+lockfiles. One-off `nix build --impure --expr` commands belong in this
+optional reference, rather than the Quickstart.
 
-Builders must work with a supplied package
-set through their overlay, rather than replacing it with their own
-pinned nixpkgs. Any required nixpkgs version or toolchain is documented.
-
-The README may then show a flake that packages the project, for authors
-who want one. That flake can live in the project's repository or in
-another one. Neither the Quickstart nor the examples require users to
-create `package.nix`, `flake.nix` or another Nix file in their source tree.
-
-The Examples section shows a reader how to use the purifier on a real
-project they might have, such as a well-known library in the ecosystem. Each
-example is the short sequence a user would follow: the commands to run in
-the project and the build from its directory. It reads like the Quickstart
-applied to a familiar project.
+The builder must also work with a supplied package set through its
+overlay, including ambient `<nixpkgs>`, rather than replacing it with its
+own pinned nixpkgs. Document compatible toolchain versions and any
+required nixpkgs version. A direct expression may use the purifier's
+pinned nixpkgs to match its lock command, or import `<nixpkgs>` from the
+user's Nix search path. This capability remains available even when the
+recommended packaging example uses a project Nix definition.
