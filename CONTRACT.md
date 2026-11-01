@@ -134,6 +134,7 @@ aarch64-linux, and its CI runs them on both:
 | `conformance-relock` | Relocking a fixture reproduces its lockfile byte for byte. |
 | `conformance-rebuild` | `nix build --rebuild` of a fixture gives the same output. |
 | `conformance-offline` | After `prefetch`, the everyday loop of a fixture works with no network. |
+| `conformance-update` | `update` on a fixture that pins an old version moves it, and both lockfiles then pass the stale check. |
 | `conformance-external` | A fixture kept external, whose `src` holds only the build tool's own files, builds from a purifier lockfile outside it. |
 
 A check that needs the network, such as a relock, runs in CI as a job of
