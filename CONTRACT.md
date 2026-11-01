@@ -50,8 +50,8 @@ import-from-derivation.
 ## The lockfile
 
 A purifier reuses the build tool's own lockfile wherever it records the
-downloads. It writes `<tool>-purifier.lock.json` next to the build tool's
-lockfile only for what that lockfile cannot record. A purifier whose build
+downloads. It writes its own lockfile, outside the project's tree, only
+for what the build tool's lockfile cannot record. A purifier whose build
 tool records everything writes no lockfile of its own.
 
 Every purifier lockfile holds a format `version` and a hash of its own
@@ -71,7 +71,8 @@ around the plugin's task.
   lockfile lists for the current system that day-to-day development needs:
   the build's downloads, the test dependencies, the toolchain, and what
   the editor asks for, such as source jars and language-server workers. It
-  keeps them alive with a garbage-collector root in the project. After a
+  keeps them alive with a garbage-collector root outside the project's
+  tree. After a
   prefetch, the everyday loop and the editor work with the network cut off.
 - `<tool>-purifier publish` uploads the `release` that Nix built.
 
