@@ -198,7 +198,8 @@ Every purifier's README has these sections, in this order:
 8. Credits
 
 The Quickstart locks a project and builds it with Nix from the project's
-directory, with no Nix file added to the project:
+directory, with no Nix file added to the project. The following form uses
+the purifier's pinned nixpkgs, so its toolchain matches the lock command:
 
 ```zsh
 nix build --impure --expr '
@@ -212,9 +213,22 @@ nix build --impure --expr '
   (pkgs.<tool>-purifier.build<Tool>Project { src = ./.; }).packages.<name>'
 ```
 
-The README then shows the flake that packages the project, for a project
-whose authors want one. The flake can live in the project's repository or in
-another one.
+`builtins.getFlake` loads the purifier's overlay; it does not require a
+`flake.nix` in the project. A user can also build with ambient `<nixpkgs>`
+by replacing `import purifier.inputs.nixpkgs` with `import <nixpkgs>`,
+resolved through the user's Nix search path. The README explains both
+choices. A lockfile that records toolchain versions needs compatible
+versions at build time: use the purifier command from the ambient package
+set to lock, or pass a compatible toolchain to the builder.
+
+Builders must work with a supplied package
+set through their overlay, rather than replacing it with their own
+pinned nixpkgs. Any required nixpkgs version or toolchain is documented.
+
+The README may then show a flake that packages the project, for authors
+who want one. That flake can live in the project's repository or in
+another one. Neither the Quickstart nor the examples require users to
+create `package.nix`, `flake.nix` or another Nix file in their source tree.
 
 The Examples section shows a reader how to use the purifier on a real
 project they might have, such as a well-known library in the ecosystem. Each
