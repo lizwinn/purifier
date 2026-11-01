@@ -15,17 +15,19 @@ capitalized, such as `Cargo`.
 
 ## The builder
 
-A purifier's flake exports `overlays.default`, which adds one builder,
-`build<Tool>Project`, to the package set, where nixpkgs keeps its own
-builders. The builder is a package for `callPackage`: it takes the packages
-it needs by name, such as `stdenvNoCC` and the purifier's own scope, and
-`build<Tool>Project.override` replaces any of them. A package in an overlay
-takes the builder by name, like any other builder:
+A purifier's flake exports `overlays.default`, which adds one attribute to
+the package set: the purifier's scope, `<tool>-purifier`, made with
+`lib.makeScope`. The scope holds the builder, `build<Tool>Project`, beside
+the purifier's command and plugin. The builder is a package for
+`callPackage` in that scope: it takes the packages it needs by name, such
+as `stdenvNoCC`, and `build<Tool>Project.override` replaces any of them.
+`<tool>-purifier.overrideScope` replaces what everything in the scope
+shares. A package in an overlay takes the scope by name:
 
 ```nix
 # package.nix
-{ build<Tool>Project }:
-(build<Tool>Project { src = ./.; }).packages.<name>
+{ <tool>-purifier }:
+(<tool>-purifier.build<Tool>Project { src = ./.; }).packages.<name>
 ```
 
 The builder takes these arguments:
