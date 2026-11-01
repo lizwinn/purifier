@@ -29,6 +29,8 @@
 
         configs = lib: lib.caisson.mkModules ./configs;
 
+        modules = lib: lib.caisson.mkModules ./modules;
+
         pkgSets = lib: lib.caisson.nixpkgs.mkConfigurations { };
 
         libOverlays = lib: lib.caisson.mkLibOverlays ./lib-overlays;
