@@ -17,18 +17,18 @@ A purifier's flake publishes one builder in its library:
 lib.<tool>-purifier.build<Tool>Project {
   pkgs,
   src,
-  lockFile ? src + "/<tool>-purifier.lock.json",
+  lockFile,
   fetchers ? { },
   # and the purifier's own arguments
 }
 ```
 
-`lockFile` lets the lockfile live outside `src`, so that a build can be
-kept apart from the project's source, such as a packaging flake for a
-project its author does not change. A purifier that needs the build tool's
-own lockfile and finds none in `src` takes it as an argument too, named
-after the file, such as `cargoLock` for Cargo.lock. Where a file is given
-outside `src`, the build uses it in place of any copy in `src`.
+The build tool's own lockfile, such as Cargo.lock or package-lock.json,
+lives in the project's tree, where the build tool keeps it. Everything a
+purifier adds lives outside the tree: `lockFile` is the purifier lockfile,
+kept by the flake that calls the builder, and the builder reads nothing a
+purifier wrote from `src`. An ecosystem with no lockfile of its own has
+only the purifier lockfile, outside the tree too.
 
 `fetchers` is passed unchanged to `fetchEntry` of the `purifier` library,
 and to `tree`. A company mirror or credentials go into `fetchers.fetchurl`,
@@ -75,8 +75,13 @@ around the plugin's task.
   prefetch, the everyday loop and the editor work with the network cut off.
 - `<tool>-purifier publish` uploads the `release` that Nix built.
 
-Each command takes `--lockfile <path>`, so the lockfile can be written to
-and read from outside the project, matching the builder's `lockFile`.
+Each command finds the purifier lockfile from `--lockfile <path>`, or
+else from the environment variable `<TOOL>_PURIFIER_LOCKFILE`, such as
+`CARGO_PURIFIER_LOCKFILE`. The dev shell of the flake that calls the
+builder sets the variable to the same path it passes as `lockFile`, so a
+developer in that shell runs the commands with no flag. A command that
+needs the purifier lockfile and finds neither stops with a message that
+says so.
 
 The everyday loop goes through the build tool's own command, such as
 `cargo build` or `sbt test`, with the locked downloads. Commands that need
@@ -97,7 +102,7 @@ aarch64-linux, and its CI runs them on both:
 | `conformance-relock` | Relocking a fixture reproduces its lockfile byte for byte. |
 | `conformance-rebuild` | `nix build --rebuild` of a fixture gives the same output. |
 | `conformance-offline` | After `prefetch`, the everyday loop of a fixture works with no network. |
-| `conformance-external` | A fixture whose `src` holds no purifier lockfile builds from a `lockFile` kept outside it. |
+| `conformance-external` | Every fixture's `src` holds only the build tool's own files, and the purifier lockfile lies outside it. |
 
 A check that needs the network, such as a relock, runs in CI as a job of
 the same name when the sandbox cannot run it.
