@@ -912,8 +912,28 @@ let
       expr = (purifier.fetchEntry { inherit pkgs; } cvs).drvAttrs.env.CVSREADONLYFS or null;
       expected = "1";
     };
-    testFetchGitWithoutPkgs = {
-      expr = fails (purifier.fetchEntry { } git);
+    # Without `pkgs`, a fetcher the caller passes is used, and the steps
+    # that build with nixpkgs fail.
+    testFetchGitWithoutPkgsTakesFetcher = {
+      expr = (purifier.fetchEntry { fetchgit = echo; } git).url;
+      expected = git.git.url;
+    };
+    testFetchDotGitWithoutPkgs = {
+      expr = fails (purifier.fetchEntry { fetchgit = echo; } (dotGitWith { }));
+      expected = true;
+    };
+    testFetchHgWithoutPkgsOrFetcher = {
+      expr = fails (
+        purifier.fetchEntry { } {
+          path = "src/hg";
+          hg = {
+            url = "https://example.org/hg";
+            rev = "0123456789abcdef0123456789abcdef01234567";
+            subrepos = false;
+          };
+          inherit hash;
+        }
+      );
       expected = true;
     };
 

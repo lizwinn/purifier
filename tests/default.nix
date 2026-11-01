@@ -162,6 +162,15 @@ in
     touch "$out"
   '';
 
+  # A git checkout fetched with builtins.fetchGit, checked against the hash
+  # of the checkout that nixpkgs' fetchgit gives.
+  fetch-git-without-pkgs = runCommand "purifier-test-fetch-git-without-pkgs" { } ''
+    src=${purifier.fetchEntry { } git}
+    grep -q "Hello World" "$src/README"
+    test ! -e "$src/.git"
+    touch "$out"
+  '';
+
   fetch-git = runCommand "purifier-test-fetch-git" { } ''
     src=${purifier.fetchEntry { inherit pkgs; } git}
     grep -q "Hello World" "$src/README"

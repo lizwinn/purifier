@@ -32,39 +32,52 @@
 #
 # `pkgs` may be left out. A file entry is then fetched with Nix's built-in
 # fetcher (builtin-fetchurl.nix), whose store path is the store path that
-# nixpkgs' fetchurl gives the same name and hash. An inline entry needs no
-# fetcher. Every other kind fails evaluation without `pkgs` or its own
-# fetcher.
+# nixpkgs' fetchurl gives the same name and hash. A git entry without a
+# .git directory is fetched with builtins.fetchGit (builtin-fetchgit.nix).
+# An inline entry needs no fetcher. Every other kind, an archive entry and
+# a git entry with a .git directory fail evaluation without `pkgs`, unless
+# the caller passes the fetcher of that kind.
 { lib }:
 let
   entries = import ./entries.nix { inherit lib; };
   inherit (entries) storeName;
   builtinFetchurl = import ./builtin-fetchurl.nix;
+  builtinFetchgit = import ./builtin-fetchgit.nix;
 
   # The last segment of a URL, without its query or fragment.
   urlBaseName = url: baseNameOf (builtins.head (builtins.split "[?#]" url));
+
+  # The default of a fetcher when fetchEntry has no `pkgs`.
+  noPkgs =
+    fetcher: args:
+    throw "purifier: fetchEntry was given neither `pkgs` nor `${fetcher}`, which the entry named ${
+      builtins.toJSON (args.name or args.module or args.url)
+    } needs";
 in
 {
   pkgs ? null,
   fetchurl ? if pkgs == null then builtinFetchurl else pkgs.fetchurl,
-  fetchgit ? pkgs.fetchgit,
-  fetchhg ? pkgs.fetchhg,
-  fetchsvn ? pkgs.fetchsvn,
-  fetchfossil ? pkgs.fetchfossil,
-  fetchbzr ? pkgs.fetchbzr,
-  fetchdarcs ? pkgs.fetchdarcs,
-  fetchpijul ? pkgs.fetchpijul,
+  fetchgit ? if pkgs == null then builtinFetchgit else pkgs.fetchgit,
+  fetchhg ? if pkgs == null then noPkgs "fetchhg" else pkgs.fetchhg,
+  fetchsvn ? if pkgs == null then noPkgs "fetchsvn" else pkgs.fetchsvn,
+  fetchfossil ? if pkgs == null then noPkgs "fetchfossil" else pkgs.fetchfossil,
+  fetchbzr ? if pkgs == null then noPkgs "fetchbzr" else pkgs.fetchbzr,
+  fetchdarcs ? if pkgs == null then noPkgs "fetchdarcs" else pkgs.fetchdarcs,
+  fetchpijul ? if pkgs == null then noPkgs "fetchpijul" else pkgs.fetchpijul,
   # With CVSREADONLYFS set, cvs writes no lock files into the repository,
   # so a repository that cannot be written to, such as one in the store,
   # can be exported too. nixpkgs' fetchcvs builds with structured
   # attributes, which export only the variables under `env`.
   fetchcvs ?
-    args:
-    (pkgs.fetchcvs args).overrideAttrs (old: {
-      env = (old.env or { }) // {
-        CVSREADONLYFS = "1";
-      };
-    }),
+    if pkgs == null then
+      noPkgs "fetchcvs"
+    else
+      args:
+      (pkgs.fetchcvs args).overrideAttrs (old: {
+        env = (old.env or { }) // {
+          CVSREADONLYFS = "1";
+        };
+      }),
 }:
 entry:
 let
@@ -73,13 +86,14 @@ let
   name = storeName (baseNameOf checked.path);
   inherit (checked) path;
 
-  # Every kind but file and inline builds with nixpkgs.
-  needsPkgs =
-    !builtins.elem kind [
-      "file"
-      "inline"
-    ];
-  pkgsProblem = "purifier: the ${kind} entry at path ${builtins.toJSON path} needs `pkgs`, which fetchEntry was not given";
+  # The steps that build with nixpkgs whatever the fetcher: unpacking an
+  # archive, rebuilding a .git directory, and writing a Darcs context.
+  withPkgs =
+    step: value:
+    if pkgs == null then
+      throw "purifier: the ${kind} entry at path ${builtins.toJSON path} needs `pkgs` for ${step}, and fetchEntry was not given it"
+    else
+      value;
 
   unpack =
     {
@@ -145,7 +159,7 @@ let
         };
       in
       if checked.git.leaveDotGit then
-        pkgs.runCommand name
+        withPkgs "rebuilding its .git directory" pkgs.runCommand name
           {
             nativeBuildInputs = [ pkgs.python3 ];
             inherit checkout;
@@ -167,7 +181,7 @@ let
       else
         checkout;
 
-    archive = unpack checked.archive;
+    archive = withPkgs "unpacking its archive" unpack checked.archive;
 
     hg = fetchhg {
       inherit name;
@@ -203,7 +217,9 @@ let
       }
       // lib.optionalAttrs (checked.darcs.rev != null) { inherit (checked.darcs) rev; }
       // lib.optionalAttrs (checked.darcs.context != null) {
-        context = pkgs.writeText "${name}-context" checked.darcs.context;
+        context =
+          withPkgs "writing its context file" pkgs.writeText "${name}-context"
+            checked.darcs.context;
       }
     );
 
@@ -232,4 +248,4 @@ let
     );
   };
 in
-if needsPkgs && pkgs == null then throw pkgsProblem else fetchers.${kind}
+fetchers.${kind}
