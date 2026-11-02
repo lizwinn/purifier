@@ -12,8 +12,39 @@ from pathlib import Path
 import zipfile
 
 from packaging.requirements import Requirement
+from packaging.tags import sys_tags
 from packaging.utils import canonicalize_name, parse_wheel_filename
 from packaging.version import Version
+
+
+def selections(views):
+    tags = {tag: index for index, tag in enumerate(sys_tags())}
+    result = {}
+    for view in views:
+        catalog = json.loads(Path(view['catalog']).read_text())
+        if catalog['version'] != 1:
+            raise ValueError('unsupported Python projection catalog')
+        for module in catalog['modules']:
+            name = canonicalize_name(module['name'])
+            candidates = []
+            for filename in module['wheels']:
+                path = Path(view['repository']) / filename
+                wheel_name, version, build, wheel_tags = parse_wheel_filename(filename)
+                if wheel_name != name or str(version) != module['version']:
+                    raise ValueError(f'Python catalog disagrees with wheel {path}')
+                ranks = [tags[tag] for tag in wheel_tags if tag in tags]
+                if ranks:
+                    candidates.append((min(ranks), build, path))
+            if not candidates:
+                raise ValueError(f'no supplied wheel installs on this Python: {name}')
+            best = min(candidate[0] for candidate in candidates)
+            selected = max((candidate for candidate in candidates if candidate[0] == best), key=lambda item: item[1])[2]
+            previous = result.get(name)
+            if previous and (previous['version'] != module['version'] or previous['wheel'].read_bytes() != selected.read_bytes()):
+                raise ValueError(f'conflicting Nix providers for Python package {name}')
+            result[name] = {'version': module['version'], 'wheel': selected}
+    return result
+
 
 
 def wheel(path):

@@ -56,6 +56,9 @@ class ProjectionTests(unittest.TestCase):
                     'dependencies': [str(root / 'provided')], 'identity': 'b' * 64}
             repository.project(spec, root / 'result', root / 'result.json')
             modules = {m['name']: m for m in json.loads((root / 'result.json').read_text())['modules']}
+            selected = repository.selections([{'repository': str(root / 'result'), 'catalog': str(root / 'result.json')}])
+            self.assertEqual(set(selected), {'library', 'helper', 'consumer'})
+            self.assertEqual(selected['library']['version'], '1.0+nix.' + 'a' * 64)
             self.assertEqual(modules['library']['version'], '1.0+nix.' + 'a' * 64)
             self.assertEqual(modules['helper']['version'], '1.0+nix.' + 'b' * 64)
             provided = next((root / 'provided').glob('*.whl'))
@@ -82,6 +85,18 @@ class ProjectionTests(unittest.TestCase):
             repository.project(spec, root / 'again', root / 'again.json')
             self.assertEqual({p.name: p.read_bytes() for p in (root / 'result').iterdir()},
                              {p.name: p.read_bytes() for p in (root / 'again').iterdir()})
+
+    def test_incompatible_supplied_wheel_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            original = fixture(root, 'library')
+            incompatible = root / original.name.replace('-py3-', '-py2-')
+            original.rename(incompatible)
+            catalog = root / 'catalog.json'
+            catalog.write_text(json.dumps({'version': 1, 'modules': [
+                {'name': 'library', 'version': '1.0', 'wheels': [incompatible.name]}]}))
+            with self.assertRaisesRegex(ValueError, 'no supplied wheel installs'):
+                repository.selections([{'repository': str(root), 'catalog': str(catalog)}])
 
     def test_conflicting_native_versions_are_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
