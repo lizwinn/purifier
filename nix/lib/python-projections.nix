@@ -34,7 +34,10 @@ let
     (toString producer)
   ]
   ++ lib.optional (runtimeRepository != null) (toString runtimeRepository)
-  ++ map (input: toString input.repository) selected;
+  ++ lib.concatMap (input: [
+    (toString input.repository)
+    (toString input.producer)
+  ]) selected;
   projection =
     runCommand name
       {
