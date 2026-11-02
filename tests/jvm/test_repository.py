@@ -40,6 +40,7 @@ class RepositoryTest(unittest.TestCase):
     def test_actual_versions_are_published_and_jar_bytes_preserved(self):
         self.pom("library", "library")
         library = self.project("library", "producer-a")
+        self.assertEqual(json.loads(Path(library["catalog"]).read_text())["producer"], "producer-a")
         self.pom("application", "application", '''<dependencies><dependency><groupId>example</groupId>
             <artifactId>library</artifactId><version>[99,100)</version></dependency></dependencies>''')
         application = self.project("application", "producer-b", [library])

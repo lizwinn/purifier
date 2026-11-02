@@ -426,7 +426,8 @@ def project(spec, maven, ivy, metadata):
     checksum_repository(maven)
     checksum_repository(ivy)
     metadata.mkdir(parents=True, exist_ok=True)
-    write(metadata / "catalog.json", (json.dumps({"version": 1, "modules": sorted(modules.values(), key=key)},
+    write(metadata / "catalog.json", (json.dumps({"version": 1, "producer": spec.get("producerHash"),
+                                                 "modules": sorted(modules.values(), key=key)},
                                                 indent=2, sort_keys=True) + "\n").encode())
 
 
