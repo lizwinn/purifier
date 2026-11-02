@@ -143,7 +143,10 @@ def module_metadata(path, module, modules):
                 available["version"] = selected["version"]
                 available["url"] = available["url"].replace("/" + old + "/", "/" + selected["version"] + "/")
                 available["url"] = available["url"].replace("-" + old + ".", "-" + selected["version"] + ".")
-    return (json.dumps(document, indent=2, sort_keys=True) + "\n").encode()
+    # Gradle's streaming parser requires this header before every other key.
+    document = {"formatVersion": document["formatVersion"],
+                **{key: value for key, value in document.items() if key != "formatVersion"}}
+    return (json.dumps(document, indent=2) + "\n").encode()
 
 
 def write(path, contents):

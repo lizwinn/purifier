@@ -100,6 +100,7 @@ class RepositoryTest(unittest.TestCase):
         projected = self.project("library", "gradle-build")
         self.assertIn(marker, next(Path(projected["maven"]).rglob("*.pom")).read_text())
         metadata = json.loads(next(Path(projected["maven"]).rglob("*.module")).read_text())
+        self.assertEqual(next(iter(metadata)), "formatVersion")
         self.assertEqual(metadata["component"]["version"], "1.0-nix-gradle-build")
         self.assertEqual(metadata["variants"][0]["dependencies"][0]["version"], {"requires": "1.0-nix-gradle-build"})
         self.assertTrue(next(Path(projected["maven"]).rglob("library-*-sources.jar")).is_file())
