@@ -50,12 +50,12 @@ def selection_expression(variable='PURIFIER_PROJECT_INPUT'):
     in assert source.narHash == input.narHash; package'''
 
 
-def maven_views(inputs, roots=None):
+def native_views(inputs, format, roots=None):
     result = []
     for index, entry in enumerate(inputs):
-        env = dict(os.environ, PURIFIER_PROJECT_INPUT=json.dumps(entry))
+        env = dict(os.environ, PURIFIER_PROJECT_INPUT=json.dumps(entry), PURIFIER_NATIVE_FORMAT=format)
         expression = 'let package = (' + selection_expression() + ''');
-          repository = package.projections.maven;
+          repository = package.projections.${builtins.getEnv "PURIFIER_NATIVE_FORMAT"};
           in [ repository repository.metadata ]'''
         root_options = ['--no-link']
         if roots is not None:
@@ -66,6 +66,14 @@ def maven_views(inputs, roots=None):
         repository, metadata = outputs['out'], outputs['metadata']
         result.append({'repository': Path(repository), 'catalog': Path(metadata) / 'catalog.json'})
     return result
+
+
+def maven_views(inputs, roots=None):
+    return native_views(inputs, 'maven', roots)
+
+
+def python_views(inputs, roots=None):
+    return native_views(inputs, 'python', roots)
 
 
 def stage_coursier(cache, views, sources, lock=None, evaluated=None):
