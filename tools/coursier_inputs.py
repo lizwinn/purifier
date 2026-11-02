@@ -161,7 +161,7 @@ def stage(cache, repository, catalog, sources, lock=None, evaluated=None):
                     if artifact.suffix == ".pom":
                         model = ET.fromstring(contents)
                         jvm.put(model, "version", requested)
-                        contents = ET.tostring(model, encoding="utf-8", xml_declaration=True)
+                        contents = jvm.xml_bytes(model)
                     elif artifact.suffix == ".module":
                         alias = {**module, "originalVersion": actual, "version": requested}
                         contents = jvm.module_metadata(artifact, alias, modules)

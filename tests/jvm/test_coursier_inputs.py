@@ -85,6 +85,14 @@ class CoursierInputsTest(unittest.TestCase):
         aliases = coursier_inputs.stage(self.cache, self.repository, self.catalog, self.sources, evaluated=[])
         self.assertFalse(any("${" in path for path in aliases))
 
+    def test_https_pom_alias_keeps_a_native_maven_root(self):
+        pom = next(self.actual.glob("*.pom"))
+        pom.write_text(pom.read_text().replace("http://maven.apache.org/POM/4.0.0", "https://maven.apache.org/POM/4.0.0"))
+        self.stage()
+        alias = self.cache / "https/repo1.maven.org/maven2/example/library_3/0.0.1/library_3-0.0.1.pom"
+        self.assertIn(b"<project xmlns=", alias.read_bytes())
+        self.assertEqual(jvm_repository.text(ET.parse(alias).getroot(), "version"), "0.0.1")
+
     def test_repeated_staging_retains_cache_timestamps(self):
         (self.sources / "build.mill").write_text('def mvnDeps = Seq(mvn"example::library:4.1")')
         self.stage()

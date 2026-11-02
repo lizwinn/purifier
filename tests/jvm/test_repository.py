@@ -54,6 +54,16 @@ class RepositoryTest(unittest.TestCase):
         self.assertTrue(Path(str(pom) + ".sha256").is_file())
         self.assertNotIn("catalog.json", [p.name for p in Path(application["maven"]).rglob("*")])
 
+    def test_http_and_https_poms_keep_an_unprefixed_maven_root(self):
+        for name, namespace in (("https", "https://maven.apache.org/POM/4.0.0"),
+                                ("http", repository.POM_NS)):
+            pom = self.pom(name, name)
+            pom.write_text(pom.read_text().replace(repository.POM_NS, namespace))
+            projection = self.project(name, name + "-build")
+            published = next(Path(projection["maven"]).rglob("*.pom"))
+            self.assertIn(b"<project xmlns=", published.read_bytes())
+            self.assertEqual(ET.parse(published).getroot().tag, "{" + namespace + "}project")
+
     def test_different_nix_builds_with_same_native_version_do_not_collide(self):
         self.pom("library", "library")
         first = self.project("library", "build-one")

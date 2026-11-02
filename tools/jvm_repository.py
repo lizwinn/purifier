@@ -109,6 +109,14 @@ def matches_selection(requested, version):
     return requested in {version, "[" + version + "]", "[" + version + "," + version + "]"}
 
 
+def xml_bytes(root):
+    # Maven's model readers expect an unprefixed project root. Native tools
+    # use both HTTP and HTTPS POM namespaces; preserve either as the default.
+    if root.tag.startswith("{"):
+        ET.register_namespace("", root.tag.split("}", 1)[0][1:])
+    return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+
+
 def rewrite_pom(root, properties, modules, own=None):
     if own is not None:
         put(root, "version", own["version"])
@@ -130,7 +138,7 @@ def rewrite_pom(root, properties, modules, own=None):
                 # Published parents are resolved from the repository, not a
                 # relative source-tree POM bearing the unprojected version.
                 put(element, "relativePath", "")
-    return ET.tostring(root, encoding="utf-8", xml_declaration=True) + b"\n"
+    return xml_bytes(root) + b"\n"
 
 
 def renamed(filename, name, old, new):
