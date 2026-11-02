@@ -4,6 +4,8 @@
 # each of them.
 { lib }:
 {
+  lockedProjectInputs = import ./locked-project-inputs.nix { inherit lib; };
+  projectInputsTool = ../../tools;
   jvmProjections = import ./jvm-projections.nix { inherit lib; };
   coursierInputsTool = ../../tools;
   clojureRewriteTool = ../../tools/rewrite_clojure.clj;

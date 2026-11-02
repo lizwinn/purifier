@@ -68,6 +68,13 @@ class CoursierInputsTest(unittest.TestCase):
         self.assertEqual(original.read_bytes(), b"original locked artifact")
         self.assertEqual(requested.read_bytes(), b"Nix-selected library")
 
+    def test_repeated_staging_retains_cache_timestamps(self):
+        (self.sources / "build.mill").write_text('def mvnDeps = Seq(mvn"example::library:4.1")')
+        self.stage()
+        files = {path: path.stat().st_mtime_ns for path in self.cache.rglob("*") if path.is_file()}
+        self.stage()
+        self.assertEqual(files, {path: path.stat().st_mtime_ns for path in files})
+
     def test_transitive_requests_come_from_project_graph(self):
         (self.sources / "project.scala").write_text('//> using dep app:adapter:1')
         root = self.cache / "https/internal.example/maven"

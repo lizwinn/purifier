@@ -66,14 +66,18 @@ def source_requests(sources, modules, lock=None):
 
 
 def replace(path, contents):
-    """Never write through a symlink into the read-only Nix store."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.unlink(missing_ok=True)
-    path.write_bytes(contents)
+    """Never write through store symlinks; retain unchanged cache mtimes."""
+    def write(destination, data):
+        if not destination.is_symlink() and destination.is_file() and destination.read_bytes() == data:
+            return
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.unlink(missing_ok=True)
+        destination.write_bytes(data)
+
+    write(path, contents)
     for algorithm in ("sha1", "md5"):
         checksum = Path(str(path) + "." + algorithm)
-        checksum.unlink(missing_ok=True)
-        checksum.write_text(hashlib.new(algorithm, contents).hexdigest() + "\n")
+        write(checksum, (hashlib.new(algorithm, contents).hexdigest() + "\n").encode())
 
 
 def stage(cache, repository, catalog, sources, lock=None):

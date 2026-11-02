@@ -219,6 +219,20 @@ one producer retain the same producer identity.
 These primitives support format adapters; they do not themselves override
 native version resolution or rewrite publication metadata.
 
+### `lockedProjectInputs`
+
+`lockedProjectInputs { inputs; system; }` resolves the Nix packages recorded
+by native lock commands. Each entry contains `reference` (the user's flake
+installable), Nix's content-pinned `url` and `narHash`, and its package
+`attribute`. The source hash is checked before selecting a package.
+
+Native Python integrations can import `project_inputs` from
+`projectInputsTool`. `pin(references, previous, refresh=False)` preserves
+existing Nix pins until an update; `maven_views(inputs)` realizes each
+package's Maven projection and its catalog together. Consumers record these
+Nix identities separately from artifact downloads and exclude provided
+repository files from the download lock.
+
 ### `jvmProjections`
 
 ```nix
