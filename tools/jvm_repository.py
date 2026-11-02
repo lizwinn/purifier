@@ -437,6 +437,23 @@ def rewrite_sources(root, catalog):
         if any(part in {"target", ".git", ".maven-purifier"} for part in path.relative_to(root).parts):
             continue
         model, properties, _ = pom_model(path)
+        # Source models need management entries even when a supplied module
+        # appears only transitively. Rewriting direct edges alone cannot
+        # select it during Maven's native dependency collection.
+        management = child(model, "dependencyManagement")
+        if management is None:
+            management = ET.SubElement(model, "{" + POM_NS + "}dependencyManagement")
+        dependencies = child(management, "dependencies")
+        if dependencies is None:
+            dependencies = ET.SubElement(management, "{" + POM_NS + "}dependencies")
+        declared = {(expand(text(dependency, "groupId"), properties),
+                     expand(text(dependency, "artifactId"), properties)) for dependency in dependencies}
+        for coordinate, selected in sorted(modules.items()):
+            if coordinate not in declared:
+                dependency = ET.SubElement(dependencies, "{" + POM_NS + "}dependency")
+                put(dependency, "groupId", selected["group"])
+                put(dependency, "artifactId", selected["name"])
+                put(dependency, "version", selected["version"])
         path.write_bytes(rewrite_pom(model, properties, modules))
 
 

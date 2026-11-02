@@ -118,6 +118,24 @@ class RepositoryTest(unittest.TestCase):
         descriptor = next(Path(result["ivy"]).rglob("ivy.xml"))
         self.assertEqual(repository.child(ET.parse(descriptor).getroot(), "info").get("revision"), "1.0-nix-ivy-build")
 
+    def test_maven_source_selection_manages_transitive_inputs(self):
+        self.pom("provider", "library")
+        projection = self.project("provider", "provider-build")
+        root = self.root / "source"
+        root.mkdir()
+        pom = root / "pom.xml"
+        pom.write_text('<project><modelVersion>4.0.0</modelVersion><groupId>example</groupId>'
+                       '<artifactId>consumer</artifactId><version>1</version></project>')
+        repository.rewrite_sources(root, projection['catalog'])
+        first = pom.read_bytes()
+        model = ET.parse(pom).getroot()
+        managed = repository.child(repository.child(model, 'dependencyManagement'), 'dependencies')
+        self.assertEqual(len(managed), 1)
+        self.assertEqual(repository.text(managed[0], 'artifactId'), 'library')
+        self.assertEqual(repository.text(managed[0], 'version'), '1.0-nix-provider-build')
+        repository.rewrite_sources(root, projection['catalog'])
+        self.assertEqual(pom.read_bytes(), first)
+
     def test_standard_ivy_fallback_scopes_and_exclusions(self):
         descriptor = self.root / "ivy.xml"
         descriptor.write_text('''<ivy-module version="2.0"><info organisation="example"
