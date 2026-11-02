@@ -26,9 +26,10 @@ class RepositoryTest(unittest.TestCase):
         path.with_suffix(".jar").write_bytes(b"original jar bytes")
         return path
 
-    def project(self, source, identity, dependencies=(), runtime=None):
+    def project(self, source, identity, dependencies=(), runtime=None, transformer=None):
         target = self.root / identity
         repository.project({"repository": str(self.root / source), "producerHash": identity,
+                            "transformerHash": transformer,
                             "dependencies": list(dependencies),
                             "runtimeRepository": str(self.root / runtime) if runtime else None}, target / "maven", target / "ivy", target / "metadata")
         return {"maven": str(target / "maven"), "ivy": str(target / "ivy"),
@@ -47,7 +48,7 @@ class RepositoryTest(unittest.TestCase):
         pom = next(Path(application["maven"]).rglob("application-*.pom"))
         root = ET.parse(pom).getroot()
         dependency = next(e for e in root.iter() if repository.local(e) == "dependency")
-        self.assertEqual(repository.text(dependency, "version"), "1.0-nix-producer-a")
+        self.assertEqual(repository.text(dependency, "version"), "[1.0-nix-producer-a]")
         self.assertEqual(repository.text(root, "version"), "1.0-nix-producer-b")
         self.assertEqual(pom.with_suffix(".jar").read_bytes(), b"original jar bytes")
         self.assertTrue(Path(str(pom) + ".sha256").is_file())
@@ -102,7 +103,7 @@ class RepositoryTest(unittest.TestCase):
         metadata = json.loads(next(Path(projected["maven"]).rglob("*.module")).read_text())
         self.assertEqual(next(iter(metadata)), "formatVersion")
         self.assertEqual(metadata["component"]["version"], "1.0-nix-gradle-build")
-        self.assertEqual(metadata["variants"][0]["dependencies"][0]["version"], {"requires": "1.0-nix-gradle-build"})
+        self.assertEqual(metadata["variants"][0]["dependencies"][0]["version"], {"requires": "1.0-nix-gradle-build", "strictly": "1.0-nix-gradle-build"})
         self.assertTrue(next(Path(projected["maven"]).rglob("library-*-sources.jar")).is_file())
         self.assertEqual(metadata["variants"][0]["files"][0]["url"], "library-1.0-nix-gradle-build.jar")
 
@@ -178,12 +179,14 @@ class RepositoryTest(unittest.TestCase):
         adapter = self.module(left, "adapter")
         self.assertNotEqual(adapter["version"], "1.0")
         self.assertEqual(adapter, self.module(right, "adapter"))
+        changed_tool = self.project("left", "left-new-tool", [provided], runtime="runtime", transformer="new-projector")
+        self.assertNotEqual(adapter["version"], self.module(changed_tool, "adapter")["version"])
         for projection in (left, right):
             directory = Path(projection["maven"])
             self.assertFalse((directory / "example/adapter/1.0").exists())
             pom = next(directory.rglob("adapter-*.pom"))
             dependency = next(e for e in ET.parse(pom).getroot().iter() if repository.local(e) == "dependency")
-            self.assertEqual(repository.text(dependency, "version"), selected)
+            self.assertEqual(repository.text(dependency, "version"), "[" + selected + "]")
             self.assertEqual(pom.with_suffix(".jar").read_bytes(), b"original jar bytes")
         self.pom("root", "root")
         self.project("root", "root-build", [left, right])
@@ -203,13 +206,21 @@ class RepositoryTest(unittest.TestCase):
             {"group": "example", "name": "library", "version": selected}]}))
         self.pom("application", "application", '<dependencies><dependency><groupId>example</groupId>'
             '<artifactId>adapter</artifactId><version>1.0</version></dependency></dependencies>')
+        app_pom = next((self.root / 'application').rglob('*.pom'))
+        app_pom.with_suffix('.module').write_text(json.dumps({
+            'formatVersion': '1.1', 'component': {'group': 'example', 'module': 'application', 'version': '1.0-SNAPSHOT'},
+            'variants': [{'name': 'runtime', 'dependencies': [
+                {'group': 'example', 'module': 'adapter', 'version': {'requires': '1.0'}}]}]}))
         projection = self.project("application", "application-build", [provided], runtime="runtime")
         adapter = self.module(projection, "adapter")
         self.assertNotEqual(adapter['version'], '1.0')
         metadata = json.loads(next(Path(projection['maven']).rglob('adapter-*.module')).read_text())
         self.assertEqual(metadata['component']['version'], adapter['version'])
-        self.assertEqual(metadata['variants'][0]['dependencies'][0]['version'], {'requires': selected})
+        self.assertEqual(metadata['variants'][0]['dependencies'][0]['version'], {'requires': selected, 'strictly': selected})
         self.assertEqual(metadata['variants'][0]['files'][0]['url'], 'adapter-' + adapter['version'] + '.jar')
+        app_metadata = json.loads(next(Path(projection['maven']).rglob('application-*.module')).read_text())
+        self.assertEqual(app_metadata['variants'][0]['dependencyConstraints'], [
+            {'group': 'example', 'module': 'library', 'version': {'requires': selected, 'strictly': selected}}])
         self.assertFalse((Path(projection['maven']) / 'example/adapter/1.0').exists())
 
     def test_private_ivy_tool_dependencies_do_not_become_maven_runtime_dependencies(self):

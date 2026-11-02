@@ -247,9 +247,14 @@ jvmProjections {
 Builds a Maven repository view at `.maven`. The input repository holds
 only the producer's own publications; coordinates come from its native
 POMs or Ivy descriptors. `producer` defaults to `repository`. Its Nix
-identity determines the publication versions, so two different Nix builds
-of the same native version have distinct coordinates. Classifier jars keep
-their bytes. POMs and Gradle module metadata name the selected versions.
+identity, supplied repositories, runtime selection and projection toolchain
+determine the publication versions through Nix, without evaluating build
+outputs. Different transformations cannot reuse the same coordinates.
+Classifier jars keep their bytes.
+
+Published POM dependencies use Maven exact-version ranges. Gradle module
+metadata uses strict constraints, including reachable transitive Nix inputs.
+Catalog versions remain literal artifact coordinates.
 
 Dependencies are ordinary Nix packages exposing `projections.maven`.
 Their repository files and catalogs compose transitively; incompatible
@@ -263,7 +268,8 @@ the selected `group`, `name` and `version` of each module. Unchanged external
 components retain their coordinates and component identity through
 re-exports. When an override changes a component's dependency metadata, that
 component receives new coordinates too. Its projected identity depends on
-its selected closure, allowing equivalent diamond dependencies to merge.
+its selected closure and projection toolchain, allowing equivalent diamond
+dependencies to merge.
 
 `formats = [ "maven" "ivy" ];` also exposes a native Ivy view when the
 producer publishes Ivy descriptors. The default exposes only Maven.

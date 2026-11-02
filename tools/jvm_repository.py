@@ -96,6 +96,19 @@ def read_catalogs(inputs):
     return modules
 
 
+def projected(module):
+    return module["version"] != module.get("originalVersion", module["version"])
+
+
+def exact_reference(module):
+    version = module["version"]
+    return "[" + version + "]" if projected(module) else version
+
+
+def matches_selection(requested, version):
+    return requested in {version, "[" + version + "]", "[" + version + "," + version + "]"}
+
+
 def rewrite_pom(root, properties, modules, own=None):
     if own is not None:
         put(root, "version", own["version"])
@@ -106,7 +119,13 @@ def rewrite_pom(root, properties, modules, own=None):
         name = expand(text(element, "artifactId"), properties)
         selected = modules.get((group, name))
         if selected is not None:
-            put(element, "version", selected["version"])
+            # A fixed Maven dependency version is only a recommendation.
+            # Published Nix selections need a native hard constraint. Parent,
+            # plugin and BOM model lookup already uses an exact coordinate;
+            # keep source-model rewrites compatible with legacy Maven too.
+            constrain = own is not None and local(element) == "dependency" and not (
+                text(element, "type") == "pom" and text(element, "scope") == "import")
+            put(element, "version", exact_reference(selected) if constrain else selected["version"])
             if local(element) == "parent":
                 # Published parents are resolved from the repository, not a
                 # relative source-tree POM bearing the unprojected version.
@@ -121,7 +140,7 @@ def renamed(filename, name, old, new):
     return name + "-" + new + filename[len(prefix):]
 
 
-def module_metadata(path, module, modules):
+def module_metadata(path, module, modules, dependency_edges=None):
     document = json.loads(path.read_text())
     document["component"]["version"] = module["version"]
     for variant in document.get("variants", []):
@@ -130,6 +149,28 @@ def module_metadata(path, module, modules):
             if selected:
                 # A single exact selection replaces conflicting rich constraints.
                 dependency["version"] = {"requires": selected["version"]}
+                if projected(selected):
+                    dependency["version"]["strictly"] = selected["version"]
+        # A foreign Maven POM's hard range is still a soft request to
+        # Gradle. Carry reachable transitive Nix selections as native strict
+        # constraints on this variant; constraints do not introduce modules.
+        roots = {(dependency.get("group"), dependency.get("module"))
+                 for dependency in variant.get("dependencies", [])}
+        pending, reachable = list(roots), set()
+        while pending and dependency_edges is not None:
+            target = pending.pop()
+            if target in reachable:
+                continue
+            reachable.add(target)
+            pending.extend(dependency_edges.get(target, set()))
+        existing = {(dependency.get("group"), dependency.get("module"))
+                    for dependency in variant.get("dependencyConstraints", [])}
+        for target in sorted(reachable - roots - existing - {key(module)}):
+            selected = modules.get(target)
+            if selected is not None and projected(selected):
+                variant.setdefault("dependencyConstraints", []).append({
+                    "group": selected["group"], "module": selected["name"],
+                    "version": {"requires": selected["version"], "strictly": selected["version"]}})
         for artifact in variant.get("files", []):
             for field in ("name", "url"):
                 if field in artifact:
@@ -297,7 +338,28 @@ def add_runtime(repository, modules, owned, maven):
     return runtime
 
 
-def normalize_runtime(runtime, modules, maven):
+def descriptor_dependencies(path, root, properties):
+    for element in root.iter():
+        if local(element) in {"dependency", "parent", "plugin", "extension"}:
+            target = (expand(text(element, "groupId"), properties),
+                      expand(text(element, "artifactId"), properties))
+            yield target, expand(text(element, "version"), properties)
+    metadata = path.with_suffix(".module")
+    if metadata.is_file():
+        document = json.loads(metadata.read_text())
+        for variant in document.get("variants", []):
+            declarations = variant.get("dependencies", []) + variant.get("dependencyConstraints", [])
+            if variant.get("available-at"):
+                declarations = declarations + [variant["available-at"]]
+            for dependency in declarations:
+                target = dependency.get("group"), dependency.get("module")
+                constraint = dependency.get("version", "")
+                if isinstance(constraint, dict):
+                    constraint = constraint.get("strictly", constraint.get("requires", constraint.get("prefers", "")))
+                yield target, constraint
+
+
+def normalize_runtime(runtime, modules, maven, transformer_hash=None):
     """Reproject foreign descriptors when Nix changes their dependency graph.
 
     Never modify a third-party POM under its original published coordinates.
@@ -309,33 +371,12 @@ def normalize_runtime(runtime, modules, maven):
     records = {key(entry[-1]): entry for entry in runtime}
     for coordinate, (pom, _, root, properties, _) in records.items():
         edges[coordinate] = set()
-        for element in root.iter():
-            if local(element) not in {"dependency", "parent", "plugin", "extension"}:
-                continue
-            target = (expand(text(element, "groupId"), properties),
-                      expand(text(element, "artifactId"), properties))
+        for target, requested in descriptor_dependencies(pom, root, properties):
             selected = modules.get(target)
             if selected is not None:
                 edges[coordinate].add(target)
-                if expand(text(element, "version"), properties) != selected["version"]:
+                if not matches_selection(requested, selected["version"]):
                     affected.add(coordinate)
-        metadata = pom.with_suffix(".module")
-        if metadata.is_file():
-            document = json.loads(metadata.read_text())
-            for variant in document.get("variants", []):
-                declarations = variant.get("dependencies", []) + variant.get("dependencyConstraints", [])
-                if variant.get("available-at"):
-                    declarations = declarations + [variant["available-at"]]
-                for dependency in declarations:
-                    target = dependency.get("group"), dependency.get("module")
-                    selected = modules.get(target)
-                    if selected is not None:
-                        edges[coordinate].add(target)
-                        constraint = dependency.get("version", "")
-                        if isinstance(constraint, dict):
-                            constraint = constraint.get("strictly", constraint.get("requires", constraint.get("prefers", "")))
-                        if constraint != selected["version"]:
-                            affected.add(coordinate)
     while True:
         additional = {coordinate for coordinate, targets in edges.items() if targets & affected} - affected
         if not additional:
@@ -351,7 +392,8 @@ def normalize_runtime(runtime, modules, maven):
             for target in edges.get(node, set()):
                 visit(target)
         visit(coordinate)
-        fingerprint = {"component": baseline[coordinate],
+        fingerprint = {"transformer": transformer_hash or hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                       "component": baseline[coordinate],
                        "closure": [baseline[node] for node in sorted(visited)]}
         identity = hashlib.sha256(json.dumps(fingerprint, sort_keys=True).encode()).hexdigest()
         module = modules[coordinate]
@@ -395,11 +437,24 @@ def project(spec, maven, ivy, metadata):
         raise ValueError(f"no published JVM components in {source}")
     if spec.get("runtimeRepository"):
         runtime = add_runtime(spec["runtimeRepository"], modules, owned, maven)
-        owned.extend(normalize_runtime(runtime, modules, maven))
+        owned.extend(normalize_runtime(runtime, modules, maven, spec.get("transformerHash")))
     for dependency in spec.get("dependencies", []):
         merge(dependency["maven"], maven)
         if "ivy" in dependency:
             merge(dependency["ivy"], ivy)
+    # Use the same selected descriptor edges for immutable foreign identities
+    # and native Gradle transitive constraints. Include supplied POMs, whose
+    # dependency graphs may extend beyond a direct dependency's descriptor.
+    dependency_edges = {}
+    models = [(path, root, properties, module) for path, _, root, properties, module in owned]
+    for module in modules.values():
+        path = maven / module["group"].replace(".", "/") / module["name"] / module["version"] / f"{module['name']}-{module['version']}.pom"
+        if path.is_file():
+            root, properties, _ = pom_model(path)
+            models.append((path, root, properties, module))
+    for path, root, properties, module in models:
+        targets = dependency_edges.setdefault(key(module), set())
+        targets.update(target for target, _ in descriptor_dependencies(path, root, properties) if target in modules)
     for path, layout, root, properties, module in owned:
         group, name = key(module)
         old, version = module["originalVersion"], module["version"]
@@ -411,7 +466,7 @@ def project(spec, maven, ivy, metadata):
                     continue
                 if not artifact.name.startswith(name + "-" + old):
                     continue
-                contents = module_metadata(artifact, module, modules) if artifact.suffix == ".module" else artifact.read_bytes()
+                contents = module_metadata(artifact, module, modules, dependency_edges) if artifact.suffix == ".module" else artifact.read_bytes()
                 write(target / renamed(artifact.name, name, old, version), contents)
         else:
             # Standard sbt/Ivy layout: org/module/revision/{ivys,jars,...}.

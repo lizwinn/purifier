@@ -21,7 +21,12 @@ let
     inherit dependencies;
     formats = [ "maven" ];
   };
+  transformer = runCommand "jvm-projector-identity" {
+    nativeBuildInputs = [ python3 ];
+    projector = ../../tools/jvm_repository.py;
+  } "touch $out";
   inputs = {
+    transformerHash = (inputIdentity transformer).hash;
     runtimeRepository = if runtimeRepository == null then null else toString runtimeRepository;
     repository = if repository == null then null else toString repository;
     dependencies = map (
