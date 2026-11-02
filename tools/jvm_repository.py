@@ -200,16 +200,52 @@ def ivy_to_pom(path):
             if not public_mappings:
                 continue
             conf = ";".join(public_mappings)
-            if conf not in {"compile->default", "compile->compile", "runtime->default", "test->default", "*->default", "default->default"}:
-                raise ValueError(f"Ivy configuration cannot be represented faithfully in a POM: {conf}")
+            # sbt uses Ivy's fallback syntax for ordinary JVM scopes.
+            scopes = []
+            for mapping in public_mappings:
+                source, separator, destination = mapping.partition("->")
+                if not separator or destination.strip() not in {
+                    "default", "compile", "runtime", "default(compile)", "default(runtime)"
+                }:
+                    raise ValueError(f"Ivy configuration cannot be represented faithfully in a POM: {conf}")
+                for scope in source.split(","):
+                    scope = scope.strip()
+                    if scope in private:
+                        continue
+                    if scope in {"*", "default"}:
+                        scope = "compile"
+                    if scope not in {"compile", "runtime", "test", "provided"}:
+                        raise ValueError(f"Ivy configuration cannot be represented faithfully in a POM: {conf}")
+                    scopes.append(scope)
+            if "provided" in scopes and any(scope not in {"provided", "test"} for scope in scopes):
+                raise ValueError(f"mixed Ivy provided configuration needs a richer Maven projection: {conf}")
+            scope = next(value for value in ("compile", "provided", "runtime", "test") if value in scopes)
             node = ET.SubElement(target, "{" + POM_NS + "}dependency")
             for name, value in (("groupId", dependency.get("org", "")),
                                 ("artifactId", dependency.get("name", "")), ("version", dependency.get("rev", ""))):
                 put(node, name, value)
-            if conf.startswith("runtime") or conf.startswith("test"):
-                put(node, "scope", conf.split("->")[0])
-            if dependency.get("transitive", "true") != "true" or list(dependency):
-                raise ValueError(f"Ivy dependency exclusions/artifacts need a richer Maven projection: {path}")
+            if scope != "compile":
+                put(node, "scope", scope)
+            exclusions = []
+            for selection in dependency:
+                if local(selection) != "exclude" or any(
+                    selection.get(key, "*") != "*" for key in ("name", "type", "ext")
+                ) or selection.get("matcher", "exact") not in {"exact", "exactOrRegexp"}:
+                    raise ValueError(f"Ivy artifact selection needs a richer Maven projection: {path}")
+                group, name = selection.get("org", "*"), selection.get("module", "*")
+                if any(character in group + name for character in "[]()|+?\\"):
+                    raise ValueError(f"Ivy exclusion pattern cannot be represented in a POM: {path}")
+                if any("*" in value and value != "*" for value in (group, name)):
+                    raise ValueError(f"Ivy exclusion pattern cannot be represented in a POM: {path}")
+                exclusions.append((group, name))
+            if dependency.get("transitive", "true") != "true":
+                exclusions = [("*", "*")]
+            if exclusions:
+                target_exclusions = ET.SubElement(node, "{" + POM_NS + "}exclusions")
+                for group, name in sorted(set(exclusions)):
+                    exclusion = ET.SubElement(target_exclusions, "{" + POM_NS + "}exclusion")
+                    put(exclusion, "groupId", group)
+                    put(exclusion, "artifactId", name)
     coordinates = (info.get("organisation"), info.get("module"), info.get("revision"))
     validate_coordinates(*coordinates)
     return pom, {}, coordinates

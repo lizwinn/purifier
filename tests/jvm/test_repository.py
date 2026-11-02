@@ -117,6 +117,28 @@ class RepositoryTest(unittest.TestCase):
         descriptor = next(Path(result["ivy"]).rglob("ivy.xml"))
         self.assertEqual(repository.child(ET.parse(descriptor).getroot(), "info").get("revision"), "1.0-nix-ivy-build")
 
+    def test_standard_ivy_fallback_scopes_and_exclusions(self):
+        descriptor = self.root / "ivy.xml"
+        descriptor.write_text('''<ivy-module version="2.0"><info organisation="example"
+          module="library" revision="1"/><dependencies>
+          <dependency org="example" name="compile" rev="1" conf="compile->default(compile);test->default">
+            <exclude org="legacy" module="old"/>
+          </dependency>
+          <dependency org="example" name="runtime" rev="1" conf="runtime->default(runtime)" transitive="false"/>
+          <dependency org="example" name="provided" rev="1" conf="provided->default(compile)"/>
+          </dependencies></ivy-module>''')
+        pom, _, _ = repository.ivy_to_pom(descriptor)
+        dependencies = list(repository.child(pom, "dependencies"))
+        self.assertEqual(repository.text(dependencies[0], "scope"), "")
+        self.assertEqual(repository.text(dependencies[1], "scope"), "runtime")
+        self.assertEqual(repository.text(dependencies[2], "scope"), "provided")
+        first = next(e for e in dependencies[0].iter() if repository.local(e) == "exclusion")
+        self.assertEqual(repository.text(first, "groupId"), "legacy")
+        self.assertEqual(repository.text(first, "artifactId"), "old")
+        second = next(e for e in dependencies[1].iter() if repository.local(e) == "exclusion")
+        self.assertEqual(repository.text(second, "groupId"), "*")
+        self.assertEqual(repository.text(second, "artifactId"), "*")
+
     def test_transitive_override_reprojects_metadata_and_preserves_diamond_identity(self):
         self.pom("provider", "library", version="2.0")
         provided = self.project("provider", "provider-build")
