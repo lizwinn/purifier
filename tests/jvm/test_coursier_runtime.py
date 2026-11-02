@@ -92,6 +92,61 @@ class RuntimeTest(unittest.TestCase):
         self.assertEqual((target/'snapshot-1-SNAPSHOT-tests.jar').read_bytes(), b'selected snapshot')
         self.assertIn('20260102.120000-2', (target/'snapshot-1-SNAPSHOT.pom').read_text())
 
+    def test_gradle_only_jvm_metadata_gets_a_separate_maven_identity(self):
+        dependency = self.pom('annotations', '2')
+        dependency.with_suffix('.jar').write_bytes(b'annotations')
+        directory = self.cache/'https/repo/example/kotlin/1'
+        directory.mkdir(parents=True)
+        jar = directory/'kotlin-1.jar'
+        jar.write_bytes(b'Kotlin JVM')
+        dependency_model = {'group': 'example', 'module': 'annotations', 'version': {'requires': '1'}}
+        document = {'formatVersion': '1.1', 'component': {'group': 'example', 'module': 'kotlin', 'version': '1'},
+            'variants': [
+                {'name': 'api', 'attributes': {'org.gradle.usage': 'java-api'},
+                 'files': [{'name': jar.name, 'url': jar.name}], 'dependencies': [dependency_model]},
+                {'name': 'runtime', 'attributes': {'org.gradle.usage': 'java-runtime'},
+                 'files': [{'name': jar.name, 'url': jar.name}], 'dependencies': [dependency_model]},
+                {'name': 'common', 'attributes': {'org.gradle.usage': 'kotlin-metadata',
+                    'org.jetbrains.kotlin.platform.type': 'common'},
+                 'files': [{'name': 'kotlin-1-all.jar', 'url': 'kotlin-1-all.jar'}]}]}
+        jar.with_suffix('.module').write_text(json.dumps(document))
+        output = self.root/'runtime'
+        coursier_runtime.export(self.cache, [str(jar), str(dependency.with_suffix('.jar'))], self.catalog, output)
+        graph = json.loads((output/'purifier-runtime-modules.json').read_text())
+        self.assertTrue(next(module for module in graph['modules'] if module['name'] == 'kotlin')['metadataProjection'])
+        pom = output/'example/kotlin/1/kotlin-1.pom'
+        self.assertIn('<version>2</version>', pom.read_text())
+        application = self.root/'application/example/application/1'
+        application.mkdir(parents=True)
+        (application/'application-1.pom').write_text('<project><groupId>example</groupId>'
+            '<artifactId>application</artifactId><version>1</version><dependencies><dependency>'
+            '<groupId>example</groupId><artifactId>kotlin</artifactId><version>1</version>'
+            '</dependency></dependencies></project>')
+        projected = self.root/'projected'
+        coursier_runtime.jvm.project({'repository': str(self.root/'application'), 'producerHash': 'application',
+            'runtimeRepository': str(output)}, projected/'maven', projected/'ivy', projected/'metadata')
+        catalog = json.loads((projected/'metadata/catalog.json').read_text())
+        version = next(module['version'] for module in catalog['modules'] if module['name'] == 'kotlin')
+        self.assertTrue(version.startswith('1-nix-'))
+        target = projected/'maven/example/kotlin'/version
+        self.assertEqual((target/('kotlin-'+version+'.jar')).read_bytes(), b'Kotlin JVM')
+        metadata = json.loads((target/('kotlin-'+version+'.module')).read_text())
+        self.assertEqual([variant['name'] for variant in metadata['variants']], ['api', 'runtime'])
+        self.assertFalse((projected/'maven/example/kotlin/1').exists())
+
+    def test_ambiguous_gradle_jvm_variants_are_rejected(self):
+        directory = self.cache/'https/repo/example/library/1'
+        directory.mkdir(parents=True)
+        jar = directory/'library-1.jar'
+        jar.write_bytes(b'JVM library')
+        jar.with_suffix('.module').write_text(json.dumps({'formatVersion': '1.1',
+            'component': {'group': 'example', 'module': 'library', 'version': '1'},
+            'variants': [{'name': name, 'attributes': {'org.gradle.usage': 'java-runtime'},
+                'files': [{'name': jar.name}], 'dependencies': [{'group': 'example', 'module': name,
+                    'version': {'requires': '1'}}]} for name in ('first', 'second')]}))
+        with self.assertRaisesRegex(ValueError, 'unambiguous native JVM runtime variant'):
+            coursier_runtime.export(self.cache, [str(jar)], self.catalog, self.root/'runtime')
+
     def test_conflicting_native_versions_are_rejected(self):
         jars = []
         for version in ('1', '2'):

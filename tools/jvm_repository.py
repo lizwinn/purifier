@@ -379,7 +379,8 @@ def normalize_runtime(runtime, modules, maven, transformer_hash=None):
     """
     edges = {}
     # Snapshot coordinates are mutable even if no dependency needs rewriting.
-    affected = {key(entry[-1]) for entry in runtime if entry[-1]['version'].endswith('-SNAPSHOT')}
+    affected = {key(entry[-1]) for entry in runtime
+                if entry[-1]['version'].endswith('-SNAPSHOT') or entry[-1].get('metadataProjection')}
     records = {key(entry[-1]): entry for entry in runtime}
     for coordinate, (pom, _, root, properties, _) in records.items():
         edges[coordinate] = set()
