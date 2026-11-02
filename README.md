@@ -233,6 +233,20 @@ package's Maven projection and its catalog together. Consumers record these
 Nix identities separately from artifact downloads and exclude provided
 repository files from the download lock.
 
+### `pythonProjections`
+
+`pythonProjections { repository; producer ? repository; runtimeRepository ? null;
+dependencies ? []; runCommand; python3; }` exports `projections.python`, a
+wheelhouse with a `catalog` attribute. `repository` holds the producer's wheels;
+`runtimeRepository` holds its native runtime closure, excluding build tools.
+Dependencies expose the same Python projection.
+
+Owned wheels receive Nix-derived local versions. Wheels whose dependencies
+change receive new identities too, and `Requires-Dist` records the selected
+versions while retaining extras and markers. Wheel metadata directories, data
+directories and `RECORD` hashes are updated together. Unchanged foreign wheels
+retain their original bytes. Ordinary Python installers can consume the result.
+
 ### `jvmProjections`
 
 ```nix

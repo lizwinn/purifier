@@ -138,6 +138,64 @@ let
   '';
 in
 {
+  python-projection =
+    let
+      interpreter = pkgs.python3.withPackages (ps: [
+        ps.packaging
+        ps.pip
+      ]);
+      native = pkgs.runCommand "native-python-library" { nativeBuildInputs = [ interpreter ]; } ''
+        export PYTHONPATH=${../tools}:${./python}
+        python - <<'PYTHON'
+        import os
+        from pathlib import Path
+        from test_repository import fixture
+        fixture(Path(os.environ['out']), 'library')
+        PYTHON
+      '';
+      projection =
+        (purifier.pythonProjections {
+          repository = native;
+          inherit (pkgs) runCommand python3;
+        }).python;
+    in
+    pkgs.runCommand "python-nix-projection-downstream"
+      {
+        nativeBuildInputs = [ interpreter ];
+        passthru = { inherit projection; };
+      }
+      ''
+        export HOME=$TMPDIR PIP_DISABLE_PIP_VERSION_CHECK=1
+        python - ${projection.catalog} <<'PYTHON'
+        import json, sys
+        module, = json.load(open(sys.argv[1]))['modules']
+        assert module['name'] == 'library'
+        assert module['version'].startswith('1.0+nix.')
+        PYTHON
+        python -m pip --isolated install --no-index --find-links ${projection} --target installed library
+        PYTHONPATH=$PWD/installed python -S -c 'import library; assert library.VALUE == "library"'
+        touch $out
+      '';
+
+  python-repository =
+    pkgs.runCommand "purifier-python-repository-tests"
+      {
+        nativeBuildInputs = [
+          (pkgs.python3.withPackages (ps: [
+            ps.packaging
+            ps.pip
+          ]))
+        ];
+      }
+      ''
+        mkdir -p tools tests
+        cp ${../tools/python_repository.py} tools/python_repository.py
+        cp -r ${./python} tests/python
+        export HOME=$TMPDIR PIP_DISABLE_PIP_VERSION_CHECK=1
+        python -B -m unittest discover -s tests/python -v
+        touch $out
+      '';
+
   jvm-repository =
     pkgs.runCommand "purifier-jvm-repository-tests"
       {
