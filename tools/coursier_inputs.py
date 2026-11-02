@@ -46,7 +46,7 @@ def source_requests(sources, modules, lock=None, evaluated=None):
             if not isinstance(dependencies, list) or not all(isinstance(d, str) for d in dependencies):
                 raise ValueError("native dependency evaluation must contain lists of coordinates")
             for dependency in dependencies:
-                match = COORDINATE.fullmatch(dependency)
+                match = COORDINATE.fullmatch(dependency.split(";", 1)[0])
                 if match is None:
                     raise ValueError(f"invalid evaluated native dependency: {dependency}")
                 declarations.add(match.groups())

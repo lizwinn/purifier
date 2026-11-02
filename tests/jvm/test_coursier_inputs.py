@@ -73,7 +73,7 @@ class CoursierInputsTest(unittest.TestCase):
     def test_native_evaluation_handles_computed_versions_without_source_guesses(self):
         (self.sources / "build.mill").write_text('def mvnDeps = Seq(mvn"example::library:${version}")')
         (self.sources / "README.md").write_text('example::library:77')
-        evaluated = {"core.mvnDeps": ["example::library:99"], "core.runMvnDeps": []}
+        evaluated = {"core.mvnDeps": ["example::library:99;force;exclude=other:module"], "core.runMvnDeps": []}
         aliases = coursier_inputs.stage(self.cache, self.repository, self.catalog, self.sources, evaluated=evaluated)
         expected = "https/repo1.maven.org/maven2/example/library_3/99/library_3-99.jar"
         self.assertIn(expected, aliases)
