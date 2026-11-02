@@ -89,12 +89,15 @@ class RepositoryTest(unittest.TestCase):
 
     def test_gradle_module_metadata_and_classifiers_follow_selection(self):
         path = self.pom("library", "library", version="1.0")
+        marker = "do_not_remove: published-with-gradle-metadata"
+        path.write_text(path.read_text().replace("<modelVersion>", "<!-- " + marker + " --><modelVersion>"))
         path.with_name("library-1.0-sources.jar").write_bytes(b"sources")
         path.with_suffix(".module").write_text(json.dumps({"formatVersion": "1.1",
           "component": {"group": "example", "module": "library", "version": "1.0"},
           "variants": [{"name": "apiElements", "files": [{"name": "library-1.0.jar", "url": "library-1.0.jar"}],
             "dependencies": [{"group": "example", "module": "library", "version": {"strictly": "1.0", "rejects": ["2.0"]}}]}]}))
         projected = self.project("library", "gradle-build")
+        self.assertIn(marker, next(Path(projected["maven"]).rglob("*.pom")).read_text())
         metadata = json.loads(next(Path(projected["maven"]).rglob("*.module")).read_text())
         self.assertEqual(metadata["component"]["version"], "1.0-nix-gradle-build")
         self.assertEqual(metadata["variants"][0]["dependencies"][0]["version"], {"requires": "1.0-nix-gradle-build"})

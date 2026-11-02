@@ -18,7 +18,7 @@ ET.register_namespace("", POM_NS)
 
 
 def local(element):
-    return element.tag.rsplit("}", 1)[-1]
+    return element.tag.rsplit("}", 1)[-1] if isinstance(element.tag, str) else ""
 
 
 def child(element, name):
@@ -59,7 +59,7 @@ def validate_coordinates(group, name, version):
 
 
 def pom_model(path):
-    root = ET.parse(path).getroot()
+    root = ET.parse(path, parser=ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))).getroot()
     parent = child(root, "parent")
     group = text(root, "groupId") or (text(parent, "groupId") if parent is not None else "")
     version = text(root, "version") or (text(parent, "version") if parent is not None else "")
@@ -67,7 +67,7 @@ def pom_model(path):
                   "project.version": version, "pom.version": version}
     props = child(root, "properties")
     if props is not None:
-        properties.update({local(e): e.text or "" for e in props})
+        properties.update({local(e): e.text or "" for e in props if isinstance(e.tag, str)})
     group = expand(group, properties)
     name = expand(text(root, "artifactId"), properties)
     version = expand(version, properties)
