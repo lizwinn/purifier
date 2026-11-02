@@ -30,7 +30,13 @@ def selection_expression(variable='PURIFIER_PROJECT_INPUT'):
     # Pass user strings through JSON/environment, never interpolate Nix code.
     return '''let
       input = builtins.fromJSON (builtins.getEnv "''' + variable + '''");
-      flake = builtins.getFlake input.url;
+      source = builtins.fetchTree ((builtins.removeAttrs (builtins.parseFlakeRef input.url) [ "dir" ])
+        // { narHash = input.narHash; });
+      hasHash = builtins.match ".*narHash=.*" input.url != null;
+      hasQuery = builtins.match ".*[?].*" input.url != null;
+      lockedUrl = input.url + (if hasHash then "" else
+        (if hasQuery then "&" else "?") + "narHash=" + input.narHash);
+      flake = builtins.getFlake lockedUrl;
       system = builtins.currentSystem;
       path = builtins.filter builtins.isString (builtins.split "[.]" input.attribute);
       has = keys: value: keys == [] || (builtins.isAttrs value && builtins.hasAttr (builtins.head keys) value
@@ -41,7 +47,7 @@ def selection_expression(variable='PURIFIER_PROJECT_INPUT'):
         then get ([ "packages" system ] ++ path) flake
         else if has ([ "legacyPackages" system ] ++ path) flake
         then get ([ "legacyPackages" system ] ++ path) flake else get path flake;
-    in assert flake.sourceInfo.narHash == input.narHash; package'''
+    in assert source.narHash == input.narHash; package'''
 
 
 def maven_views(inputs, roots=None):
