@@ -21,10 +21,9 @@ let
     inherit dependencies;
     formats = [ "maven" ];
   };
-  spec = builtins.toJSON {
+  inputs = {
     runtimeRepository = if runtimeRepository == null then null else toString runtimeRepository;
     repository = if repository == null then null else toString repository;
-    producerHash = if repository == null then null else (inputIdentity producer).hash;
     dependencies = map (
       input:
       {
@@ -36,6 +35,24 @@ let
       }
     ) selected;
   };
+  # The native producer alone does not identify transformed metadata: a
+  # different projector or supplied repository can change its POM without
+  # changing any producer JAR. Ask Nix for an unbuilt identity derivation of
+  # the complete transformation inputs. The final projection can then refer
+  # to that identity without its version referring to its own output hash.
+  identity = runCommand "${name}-identity" {
+    nativeBuildInputs = [ python3 ];
+    spec = builtins.toJSON inputs;
+    producer = if repository == null then "" else toString producer;
+    producerIdentity = if repository == null then "" else (inputIdentity producer).hash;
+    projector = ../../tools/jvm_repository.py;
+  } "touch $out";
+  spec = builtins.toJSON (
+    inputs
+    // {
+      producerHash = if repository == null then null else (inputIdentity identity).hash;
+    }
+  );
   projection =
     runCommand name
       {

@@ -28,8 +28,33 @@ let
   linked = repositoryTree true;
   copied = repositoryTree false;
   identity = purifier.inputIdentity source;
+  projectionHash =
+    repository: dependency:
+    let
+      projection = purifier.jvmProjections {
+        inherit repository;
+        dependencies = [ dependency ];
+        inherit (pkgs) runCommand python3;
+        name = "projection-identity-test";
+      };
+    in
+    (builtins.fromJSON (builtins.unsafeDiscardStringContext projection.maven.spec)).producerHash;
+  supplied =
+    view:
+    source
+    // {
+      projections.maven = view // {
+        catalog = "${view}/catalog.json";
+      };
+    };
   force = value: builtins.tryEval (builtins.deepSeq value true);
 in
+# No import from a derivation: all three identities are evaluated while the
+# synthetic repositories have not been built and contain no Maven catalog.
+assert projectionHash source (supplied maven) == projectionHash source (supplied maven);
+assert projectionHash source (supplied maven) != projectionHash source (supplied ivy);
+assert projectionHash source (supplied maven) != projectionHash other (supplied maven);
+assert !(force (projectionHash "/home/user/repository" (supplied maven))).success;
 assert identity.hash == (purifier.inputIdentity source).hash;
 assert identity.hash != (purifier.inputIdentity other).hash;
 assert builtins.attrNames identity.context == [ source.drvPath ];
