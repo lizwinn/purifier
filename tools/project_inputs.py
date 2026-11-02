@@ -44,15 +44,30 @@ def selection_expression(variable='PURIFIER_PROJECT_INPUT'):
     in assert flake.sourceInfo.narHash == input.narHash; package'''
 
 
-def maven_views(inputs):
+def maven_views(inputs, roots=None):
     result = []
-    for entry in inputs:
+    for index, entry in enumerate(inputs):
         env = dict(os.environ, PURIFIER_PROJECT_INPUT=json.dumps(entry))
         expression = 'let package = (' + selection_expression() + ''');
           repository = package.projections.maven;
           in [ repository repository.metadata ]'''
-        builds = nix_json('build', '--impure', '--no-link', '--json', '--expr', expression, env=env)
+        root_options = ['--no-link']
+        if roots is not None:
+            Path(roots).mkdir(parents=True, exist_ok=True)
+            root_options = ['--out-link', str(Path(roots).resolve() / str(index))]
+        builds = nix_json('build', '--impure', *root_options, '--json', '--expr', expression, env=env)
         outputs = {name: path for build in builds for name, path in build['outputs'].items()}
         repository, metadata = outputs['out'], outputs['metadata']
         result.append({'repository': Path(repository), 'catalog': Path(metadata) / 'catalog.json'})
     return result
+
+
+def stage_coursier(cache, views, sources, lock=None):
+    """Return exact supplied cache paths, keeping tool-only versions lockable."""
+    import coursier_inputs
+    import jvm_repository
+    jvm_repository.read_catalogs([{'catalog': str(view['catalog'])} for view in views])
+    aliases = set()
+    for view in views:
+        aliases.update(coursier_inputs.stage(cache, view['repository'], view['catalog'], sources, lock))
+    return aliases

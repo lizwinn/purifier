@@ -129,6 +129,7 @@ def stage(cache, repository, catalog, sources, lock=None):
                     requests[target].add(selected)
                 elif (*target, selected) in records:
                     pending.append((*target, selected))
+    aliases = set()
     for coordinate, module in modules.items():
         group, name = coordinate
         actual = module["version"]
@@ -151,7 +152,9 @@ def stage(cache, repository, catalog, sources, lock=None):
                     elif artifact.suffix == ".module":
                         alias = {**module, "originalVersion": actual, "version": requested}
                         contents = jvm.module_metadata(artifact, alias, modules)
-                    replace(directory / requested / filename, contents)
+                    target = directory / requested / filename
+                    replace(target, contents)
+                    aliases.add(target.relative_to(cache).as_posix())
             metadata = ET.Element("metadata")
             for field, value in (("groupId", group), ("artifactId", name)):
                 ET.SubElement(metadata, field).text = value
@@ -162,7 +165,10 @@ def stage(cache, repository, catalog, sources, lock=None):
             for requested in sorted(requests[coordinate]):
                 ET.SubElement(versions, "version").text = requested
             ET.SubElement(versioning, "lastUpdated").text = "19800101000000"
-            replace(directory / "maven-metadata.xml", ET.tostring(metadata, encoding="utf-8", xml_declaration=True))
+            target = directory / "maven-metadata.xml"
+            replace(target, ET.tostring(metadata, encoding="utf-8", xml_declaration=True))
+            aliases.add(target.relative_to(cache).as_posix())
+    return aliases
 
 
 def main():

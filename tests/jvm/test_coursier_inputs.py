@@ -63,7 +63,9 @@ class CoursierInputsTest(unittest.TestCase):
         requested = root / "example/library_3/4.1/library_3-4.1.jar"
         requested.parent.mkdir(parents=True)
         requested.symlink_to(original)
-        self.stage()
+        aliases = coursier_inputs.stage(self.cache, self.repository, self.catalog, self.sources)
+        self.assertIn(requested.relative_to(self.cache).as_posix(), aliases)
+        self.assertNotIn((tool / "library_3-4.4.jar").relative_to(self.cache).as_posix(), aliases)
         self.assertEqual((tool / "library_3-4.4.jar").read_bytes(), b"Mill's own library")
         self.assertEqual(original.read_bytes(), b"original locked artifact")
         self.assertEqual(requested.read_bytes(), b"Nix-selected library")
