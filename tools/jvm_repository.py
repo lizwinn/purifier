@@ -419,6 +419,19 @@ def normalize_runtime(runtime, modules, maven, transformer_hash=None):
     return [records[coordinate] for coordinate in sorted(affected)]
 
 
+def publications(repository):
+    """Every deployable GAV, including non-selectable parent and BOM models."""
+    result = []
+    for path in sorted(repository.rglob('*.pom')):
+        version, name = path.parent.name, path.parent.parent.name
+        if path.name != name + '-' + version + '.pom':
+            continue
+        group = '.'.join(path.parent.parent.parent.relative_to(repository).parts)
+        validate_coordinates(group, name, version)
+        result.append({'group': group, 'name': name, 'version': version})
+    return result
+
+
 def project(spec, maven, ivy, metadata):
     source = Path(spec["repository"]) if spec.get("repository") is not None else None
     maven.mkdir(parents=True, exist_ok=True)
@@ -532,7 +545,8 @@ def project(spec, maven, ivy, metadata):
     checksum_repository(ivy)
     metadata.mkdir(parents=True, exist_ok=True)
     write(metadata / "catalog.json", (json.dumps({"version": 1, "producer": spec.get("producerHash"),
-                                                 "modules": sorted(modules.values(), key=key)},
+                                                 "modules": sorted(modules.values(), key=key),
+                                                 "publications": publications(maven)},
                                                 indent=2, sort_keys=True) + "\n").encode())
 
 

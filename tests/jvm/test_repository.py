@@ -278,6 +278,21 @@ class RepositoryTest(unittest.TestCase):
         second = self.project('application', 'snapshot-second', runtime='runtime')
         self.assertNotEqual(selected, self.module(second, 'snapshot')['version'])
 
+    def test_auxiliary_model_versions_are_published_without_becoming_selectors(self):
+        self.pom('application', 'application', version='1')
+        for name, parent_version in [('first', '1'), ('second', '2')]:
+            self.pom('runtime', name, '<parent><groupId>example</groupId>'
+                '<artifactId>private-parent</artifactId><version>'+parent_version+'</version></parent>', version='1')
+            parent = self.pom('runtime', 'private-parent', version=parent_version)
+            parent.with_suffix('.jar').unlink()
+        (self.root/'runtime/purifier-runtime-modules.json').write_text(json.dumps({'modules': [
+            {'group': 'example', 'name': name, 'version': '1'} for name in ('first', 'second')]}))
+        projected = self.project('application', 'models', runtime='runtime')
+        catalog = json.loads(Path(projected['catalog']).read_text())
+        self.assertNotIn('private-parent', {module['name'] for module in catalog['modules']})
+        self.assertEqual({module['version'] for module in catalog['publications']
+                          if module['name'] == 'private-parent'}, {'1', '2'})
+
     def test_private_ivy_tool_dependencies_do_not_become_maven_runtime_dependencies(self):
         source = self.root / "ivy" / "example" / "java" / "1"
         (source / "ivys").mkdir(parents=True)
