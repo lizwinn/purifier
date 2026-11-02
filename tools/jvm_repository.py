@@ -10,6 +10,7 @@ import hashlib
 import json
 import re
 import shutil
+from urllib.parse import urlsplit, unquote
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -182,8 +183,10 @@ def module_metadata(path, module, modules, dependency_edges=None):
         for artifact in variant.get("files", []):
             for field in ("name", "url"):
                 if field in artifact:
-                    artifact[field] = renamed(artifact[field], module["name"],
-                                              module["originalVersion"], module["version"])
+                    filename = unquote(urlsplit(artifact[field]).path.rsplit('/', 1)[-1])
+                    if filename.startswith(module['name'] + '-' + module['originalVersion']):
+                        artifact[field] = renamed(filename, module["name"],
+                                                  module["originalVersion"], module["version"])
         available = variant.get("available-at")
         if available:
             selected = modules.get((available.get("group"), available.get("module")))

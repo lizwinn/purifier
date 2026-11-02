@@ -134,6 +134,20 @@ class RepositoryTest(unittest.TestCase):
         self.assertTrue(next(Path(projected["maven"]).rglob("library-*-sources.jar")).is_file())
         self.assertEqual(metadata["variants"][0]["files"][0]["url"], "library-1.0-nix-gradle-build.jar")
 
+    def test_gradle_metadata_preserves_other_platform_artifact_references(self):
+        path = self.pom('library', 'guava', version='1-jre')
+        path.with_suffix('.module').write_text(json.dumps({'formatVersion': '1.1',
+            'component': {'group': 'example', 'module': 'guava', 'version': '1-jre'},
+            'variants': [
+                {'name': 'jre', 'files': [{'name': 'guava-1-jre.jar',
+                    'url': 'https://repo.example/example/guava/1-jre/guava-1-jre.jar'}]},
+                {'name': 'android', 'files': [{'name': 'guava-1-android.jar',
+                    'url': '../1-android/guava-1-android.jar'}]}]}))
+        result = self.project('library', 'guava-build')
+        metadata = json.loads(next(Path(result['maven']).rglob('*.module')).read_text())
+        self.assertEqual(metadata['variants'][0]['files'][0]['url'], 'guava-1-jre-nix-guava-build.jar')
+        self.assertEqual(metadata['variants'][1]['files'][0]['url'], '../1-android/guava-1-android.jar')
+
     def test_ivy_producer_exports_maven_and_ivy_with_one_identity(self):
         source = self.root / "ivy" / "example" / "library" / "1.0"
         (source / "ivys").mkdir(parents=True)
