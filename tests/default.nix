@@ -138,6 +138,19 @@ let
   '';
 in
 {
+  jvm-repository =
+    pkgs.runCommand "purifier-jvm-repository-tests"
+      {
+        nativeBuildInputs = [ pkgs.python3 ];
+      }
+      ''
+        cp -r ${../tools} tools
+        mkdir -p tests
+        cp -r ${./jvm} tests/jvm
+        python -B -m unittest discover -s tests/jvm -v
+        touch $out
+      '';
+  projections = import ./projections.nix { inherit pkgs purifier; };
   evaluation = import ./evaluation.nix { inherit pkgs purifier; };
 
   fetch-file = runCommand "purifier-test-fetch-file" { } ''

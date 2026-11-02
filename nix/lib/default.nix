@@ -4,6 +4,12 @@
 # each of them.
 { lib }:
 {
+  jvmProjections = import ./jvm-projections.nix { inherit lib; };
+  coursierInputsTool = ../../tools;
+  clojureRewriteTool = ../../tools/rewrite_clojure.clj;
+  jvmRepositoryTool = ../../tools/jvm_repository.py;
+  inputIdentity = import ./input-identity.nix { inherit lib; };
+  projectInputs = import ./project-inputs.nix { inherit lib; };
   fetchEntry = import ./fetch.nix { inherit lib; };
   tree = import ./tree.nix { inherit lib; };
   manifest = import ./manifest.nix { inherit lib; };

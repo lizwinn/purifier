@@ -197,6 +197,84 @@ behind symbolic links. `pkgs` and the fetchers go to `fetchEntry`.
 Two entries at the same path fail evaluation, and so does an entry whose
 path lies inside the path of another entry.
 
+The result exposes `provenance`, an attribute set mapping each entry path
+to its fetched Nix source. This preserves per-entry provenance when `link`
+is false as well as when it is true. It adds no files to the tree.
+
+### `inputIdentity` and `projectInputs`
+
+`inputIdentity input` returns the input's Nix string `context` and a SHA-256
+`hash` of that context. It inspects derivation/output references without
+building outputs. Inputs without Nix context fail. This is a build-input
+identity, not a content hash or a traversal of runtime references.
+
+`projectInputs { dependencies; formats; }` selects the first supported
+format from each dependency's `projections` attribute set. For example, a
+consumer accepting `[ "maven" "ivy" ]` prefers `dependency.projections.maven`
+and otherwise accepts `dependency.projections.ivy`. Missing formats fail.
+Each result contains `producer`, `format`, `repository`, `identity` for the
+producer, and `repositoryIdentity` for the selected view. Two formats of
+one producer retain the same producer identity.
+
+These primitives support format adapters; they do not themselves override
+native version resolution or rewrite publication metadata.
+
+### `jvmProjections`
+
+```nix
+jvmProjections {
+  repository = builtPublications;
+  producer = builtProject;
+  dependencies = [ upstreamPackage ];
+  inherit runCommand python3;
+}
+```
+
+Builds a Maven repository view at `.maven`. The input repository holds
+only the producer's own publications; coordinates come from its native
+POMs or Ivy descriptors. `producer` defaults to `repository`. Its Nix
+identity determines the publication versions, so two different Nix builds
+of the same native version have distinct coordinates. Classifier jars keep
+their bytes. POMs and Gradle module metadata name the selected versions.
+
+Dependencies are ordinary Nix packages exposing `projections.maven`.
+Their repository files and catalogs compose transitively; incompatible
+providers for the same module fail. No version-rewrite map is required.
+The Maven output exposes `.catalog`, a JSON file in a separate metadata
+output. It is not part of the native repository or its download lock.
+
+`runtimeRepository` optionally supplies an already-resolved runtime closure.
+It must include `purifier-runtime-modules.json`, whose `modules` array names
+the selected `group`, `name` and `version` of each module. Unchanged external
+components retain their coordinates and component identity through
+re-exports. When an override changes a component's dependency metadata, that
+component receives new coordinates too. Its projected identity depends on
+its selected closure, allowing equivalent diamond dependencies to merge.
+
+`formats = [ "maven" "ivy" ];` also exposes a native Ivy view when the
+producer publishes Ivy descriptors. The default exposes only Maven.
+Ivy configurations or extra attributes that cannot yet be translated
+faithfully fail explicitly. Consumers must not silently drop native
+configuration, variant or exclusion semantics.
+
+`coursierInputsTool` names the directory containing `coursier_inputs.py`.
+Adapters invoke it with `--cache`, `--repository`, `--catalog`, `--sources`
+and optionally `--lock`. It stages private cache aliases for native version
+requests, using source declarations and the locked POM graph. These aliases
+are never exported as published coordinates. The adapter must rewrite its
+emitted POM with `jvmRepositoryTool --rewrite-pom FILE --catalog CATALOG`.
+For computed declarations, the adapter must obtain their evaluated native
+coordinates before staging; the staging tool rejects unresolved matching
+version expressions.
+
+`clojureRewriteTool` selects coordinates in copied `deps.edn` files through
+Clojure's native EDN reader. It leaves local and git coordinates intact.
+It takes the generated EDN selection file and source directory as arguments.
+
+The adapter must still arrange native resolution, keep supplied files out
+of download locks, and publish the projected repository. These library
+functions do not install native-tool hooks.
+
 ### `manifest`
 
 ```nix
