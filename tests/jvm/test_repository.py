@@ -187,6 +187,30 @@ class RepositoryTest(unittest.TestCase):
         self.pom("root", "root")
         self.project("root", "root-build", [left, right])
 
+    def test_foreign_gradle_metadata_selection_reprojects_the_component(self):
+        self.pom("provider", "library", version="2.0")
+        provided = self.project("provider", "provider-build")
+        selected = self.module(provided, "library")["version"]
+        pom = self.pom("runtime", "adapter", version="1.0")
+        pom.with_suffix('.module').write_text(json.dumps({"formatVersion": "1.1",
+            "component": {"group": "example", "module": "adapter", "version": "1.0"},
+            "variants": [{"name": "runtimeElements", "dependencies": [{"group": "example",
+                "module": "library", "version": {"requires": "1.0"}}], "files": [
+                {"name": "adapter-1.0.jar", "url": "adapter-1.0.jar"}]}]}))
+        (self.root / "runtime/purifier-runtime-modules.json").write_text(json.dumps({"modules": [
+            {"group": "example", "name": "adapter", "version": "1.0"},
+            {"group": "example", "name": "library", "version": selected}]}))
+        self.pom("application", "application", '<dependencies><dependency><groupId>example</groupId>'
+            '<artifactId>adapter</artifactId><version>1.0</version></dependency></dependencies>')
+        projection = self.project("application", "application-build", [provided], runtime="runtime")
+        adapter = self.module(projection, "adapter")
+        self.assertNotEqual(adapter['version'], '1.0')
+        metadata = json.loads(next(Path(projection['maven']).rglob('adapter-*.module')).read_text())
+        self.assertEqual(metadata['component']['version'], adapter['version'])
+        self.assertEqual(metadata['variants'][0]['dependencies'][0]['version'], {'requires': selected})
+        self.assertEqual(metadata['variants'][0]['files'][0]['url'], 'adapter-' + adapter['version'] + '.jar')
+        self.assertFalse((Path(projection['maven']) / 'example/adapter/1.0').exists())
+
     def test_private_ivy_tool_dependencies_do_not_become_maven_runtime_dependencies(self):
         source = self.root / "ivy" / "example" / "java" / "1"
         (source / "ivys").mkdir(parents=True)

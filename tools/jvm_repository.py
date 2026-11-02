@@ -304,7 +304,7 @@ def normalize_runtime(runtime, modules, maven):
     edges = {}
     affected = set()
     records = {key(entry[-1]): entry for entry in runtime}
-    for coordinate, (_, _, root, properties, _) in records.items():
+    for coordinate, (pom, _, root, properties, _) in records.items():
         edges[coordinate] = set()
         for element in root.iter():
             if local(element) not in {"dependency", "parent", "plugin", "extension"}:
@@ -316,6 +316,23 @@ def normalize_runtime(runtime, modules, maven):
                 edges[coordinate].add(target)
                 if expand(text(element, "version"), properties) != selected["version"]:
                     affected.add(coordinate)
+        metadata = pom.with_suffix(".module")
+        if metadata.is_file():
+            document = json.loads(metadata.read_text())
+            for variant in document.get("variants", []):
+                declarations = variant.get("dependencies", []) + variant.get("dependencyConstraints", [])
+                if variant.get("available-at"):
+                    declarations = declarations + [variant["available-at"]]
+                for dependency in declarations:
+                    target = dependency.get("group"), dependency.get("module")
+                    selected = modules.get(target)
+                    if selected is not None:
+                        edges[coordinate].add(target)
+                        constraint = dependency.get("version", "")
+                        if isinstance(constraint, dict):
+                            constraint = constraint.get("strictly", constraint.get("requires", constraint.get("prefers", "")))
+                        if constraint != selected["version"]:
+                            affected.add(coordinate)
     while True:
         additional = {coordinate for coordinate, targets in edges.items() if targets & affected} - affected
         if not additional:
