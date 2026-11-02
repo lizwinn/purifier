@@ -64,6 +64,34 @@ class RuntimeTest(unittest.TestCase):
         self.assertEqual((target / pom.name).read_bytes(), pom.read_bytes())
         self.assertEqual((target / build.name).read_bytes(), build.read_bytes())
 
+    def test_url_escaped_native_versions_use_normal_maven_names(self):
+        pom = self.pom('native', '2.13+0.5')
+        encoded = pom.parent.with_name('2.13%2B0.5')
+        pom.parent.rename(encoded)
+        pom = encoded/'native-2.13%2B0.5.pom'
+        (encoded/'native-2.13+0.5.pom').rename(pom)
+        jar = pom.with_suffix('.jar')
+        jar.write_bytes(b'scala native')
+        output = self.root/'runtime'
+        coursier_runtime.export(self.cache, [str(jar)], self.catalog, output)
+        self.assertEqual((output/'example/native/2.13+0.5/native-2.13+0.5.jar').read_bytes(), b'scala native')
+        self.assertTrue((output/'example/native/2.13+0.5/native-2.13+0.5.pom').is_file())
+
+    def test_timestamped_snapshot_uses_its_selected_descriptor(self):
+        pom = self.pom('snapshot', '1-SNAPSHOT')
+        pom.unlink()
+        for timestamp in ('20260101.120000-1', '20260102.120000-2'):
+            candidate = pom.with_name('snapshot-1-'+timestamp+'.pom')
+            candidate.write_text('<project><groupId>example</groupId><artifactId>snapshot</artifactId>'
+                '<version>1-SNAPSHOT</version><description>'+timestamp+'</description></project>')
+        jar = pom.with_name('snapshot-1-20260102.120000-2-tests.jar')
+        jar.write_bytes(b'selected snapshot')
+        output = self.root/'runtime'
+        coursier_runtime.export(self.cache, [str(jar)], self.catalog, output)
+        target = output/'example/snapshot/1-SNAPSHOT'
+        self.assertEqual((target/'snapshot-1-SNAPSHOT-tests.jar').read_bytes(), b'selected snapshot')
+        self.assertIn('20260102.120000-2', (target/'snapshot-1-SNAPSHOT.pom').read_text())
+
     def test_conflicting_native_versions_are_rejected(self):
         jars = []
         for version in ('1', '2'):

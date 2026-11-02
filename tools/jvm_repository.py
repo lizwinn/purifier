@@ -375,7 +375,8 @@ def normalize_runtime(runtime, modules, maven, transformer_hash=None):
     root: equivalent diamonds keep equivalent component identities.
     """
     edges = {}
-    affected = set()
+    # Snapshot coordinates are mutable even if no dependency needs rewriting.
+    affected = {key(entry[-1]) for entry in runtime if entry[-1]['version'].endswith('-SNAPSHOT')}
     records = {key(entry[-1]): entry for entry in runtime}
     for coordinate, (pom, _, root, properties, _) in records.items():
         edges[coordinate] = set()

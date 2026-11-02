@@ -250,6 +250,20 @@ class RepositoryTest(unittest.TestCase):
             {'group': 'example', 'module': 'library', 'version': {'requires': selected, 'strictly': selected}}])
         self.assertFalse((Path(projection['maven']) / 'example/adapter/1.0').exists())
 
+    def test_foreign_snapshots_get_content_bound_immutable_versions(self):
+        self.pom('application', 'application', version='1')
+        self.pom('runtime', 'snapshot', version='2-SNAPSHOT')
+        (self.root/'runtime/purifier-runtime-modules.json').write_text(json.dumps({'modules': [
+            {'group': 'example', 'name': 'snapshot', 'version': '2-SNAPSHOT'}]}))
+        first = self.project('application', 'snapshot-first', runtime='runtime')
+        selected = self.module(first, 'snapshot')['version']
+        self.assertTrue(selected.startswith('2-nix-'))
+        self.assertNotIn('SNAPSHOT', selected)
+        jar = self.root/'runtime/example/snapshot/2-SNAPSHOT/snapshot-2-SNAPSHOT.jar'
+        jar.write_bytes(b'changed upstream snapshot')
+        second = self.project('application', 'snapshot-second', runtime='runtime')
+        self.assertNotEqual(selected, self.module(second, 'snapshot')['version'])
+
     def test_private_ivy_tool_dependencies_do_not_become_maven_runtime_dependencies(self):
         source = self.root / "ivy" / "example" / "java" / "1"
         (source / "ivys").mkdir(parents=True)

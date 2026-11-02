@@ -3,9 +3,25 @@
 import json
 from pathlib import Path
 import re
+from urllib.parse import unquote
 import xml.etree.ElementTree as ET
 
 import jvm_repository as jvm
+
+
+def artifact_name(path, coordinate):
+    """Normalize URL-escaped cache paths and unique Maven snapshot names."""
+    _, name, version = coordinate
+    filename = unquote(path.name)
+    prefix = name + '-' + version
+    if filename.startswith(prefix + '.') or filename.startswith(prefix + '-'):
+        return filename
+    if version.endswith('-SNAPSHOT'):
+        timestamped = re.fullmatch(re.escape(name + '-' + version[:-len('SNAPSHOT')])
+                                  + r'\d{8}\.\d{6}-\d+((?:-[^.]+)?\.[^/]+)', filename)
+        if timestamped:
+            return prefix + timestamped.group(1)
+    return None
 
 
 def export(cache, classpath, catalog, destination):
@@ -15,6 +31,8 @@ def export(cache, classpath, catalog, destination):
     for path in sorted(cache.rglob("*.pom")):
         primary = path.parent / f"{path.parent.parent.name}-{path.parent.name}.pom"
         if primary.is_file() and path != primary:
+            continue
+        if path.name.endswith('-build.pom') and path.with_name(path.name[:-len('-build.pom')]+'.pom').is_file():
             continue
         try:
             root, properties, coordinate = jvm.pom_model(path)
@@ -57,12 +75,12 @@ def export(cache, classpath, catalog, destination):
         target = directory(coordinate)
         name, version = coordinate[1:]
         jvm.write(target / f"{name}-{version}.pom", path.read_bytes())
-        build = path.with_name(f"{name}-{version}-build.pom")
+        build = path.with_name(path.stem + "-build.pom")
         if build.is_file():
-            jvm.write(target / build.name, build.read_bytes())
+            jvm.write(target / f"{name}-{version}-build.pom", build.read_bytes())
         richer = path.with_suffix(".module")
         if richer.is_file():
-            jvm.write(target / richer.name, richer.read_bytes())
+            jvm.write(target / f"{name}-{version}.module", richer.read_bytes())
         copying.remove(coordinate)
         properties_cache[coordinate] = effective
         return effective
@@ -80,7 +98,11 @@ def export(cache, classpath, catalog, destination):
             for pom in poms:
                 root, properties, coordinate = jvm.pom_model(pom)
                 name, version = coordinate[1:]
-                if path.name.startswith(name + "-" + version + ".") or path.name.startswith(name + "-" + version + "-"):
+                if version.endswith('-SNAPSHOT') and artifact_name(pom, coordinate) != unquote(pom.name):
+                    stem, filename = unquote(pom.stem), unquote(path.name)
+                    if not (filename.startswith(stem + '.') or filename.startswith(stem + '-')):
+                        continue
+                if artifact_name(path, coordinate) is not None:
                     matches.append(coordinate)
                     records[coordinate] = pom, root, properties
             if len(matches) != 1:
@@ -94,7 +116,7 @@ def export(cache, classpath, catalog, destination):
                 raise ValueError(f"conflicting selected native runtime versions for {group}:{name}")
             if module is None:
                 metadata(coordinate)
-                jvm.write(directory(coordinate) / path.name, path.read_bytes())
+                jvm.write(directory(coordinate) / artifact_name(path, coordinate), path.read_bytes())
     modules = [{"group": group, "name": name, "version": version}
                for (group, name), version in sorted(selected.items())]
     jvm.write(destination / "purifier-runtime-modules.json",
