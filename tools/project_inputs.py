@@ -68,14 +68,14 @@ def maven_views(inputs, roots=None):
     return result
 
 
-def stage_coursier(cache, views, sources, lock=None):
+def stage_coursier(cache, views, sources, lock=None, evaluated=None):
     """Return exact supplied cache paths, keeping tool-only versions lockable."""
     import coursier_inputs
     import jvm_repository
     jvm_repository.read_catalogs([{'catalog': str(view['catalog'])} for view in views])
     aliases = set()
     for view in views:
-        aliases.update(coursier_inputs.stage(cache, view['repository'], view['catalog'], sources, lock))
+        aliases.update(coursier_inputs.stage(cache, view['repository'], view['catalog'], sources, lock, evaluated))
     return aliases
 
 

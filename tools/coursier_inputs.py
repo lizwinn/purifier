@@ -35,33 +35,46 @@ def candidate(version, original):
     return version
 
 
-def source_requests(sources, modules, lock=None):
+def source_requests(sources, modules, lock=None, evaluated=None):
     requests = {coordinate: {module["originalVersion"], module["version"]}
                 for coordinate, module in modules.items()}
     texts = []
-    for directory, subdirectories, files in os.walk(sources):
+    if evaluated is not None:
+        values = evaluated.values() if isinstance(evaluated, dict) else [evaluated]
+        declarations = set()
+        for dependencies in values:
+            if not isinstance(dependencies, list) or not all(isinstance(d, str) for d in dependencies):
+                raise ValueError("native dependency evaluation must contain lists of coordinates")
+            for dependency in dependencies:
+                match = COORDINATE.fullmatch(dependency)
+                if match is None:
+                    raise ValueError(f"invalid evaluated native dependency: {dependency}")
+                declarations.add(match.groups())
+    else:
+        declarations = set()
+    for directory, subdirectories, files in os.walk(sources) if evaluated is None else []:
         subdirectories[:] = [name for name in subdirectories if name not in SOURCE_DIRECTORIES]
         for name in files:
             path = Path(directory) / name
             if path.suffix in {".scala", ".sc", ".mill", ".java", ".md"}:
                 texts.append(path.read_text(errors="replace"))
-    if lock is not None:
+    if evaluated is None and lock is not None:
         texts.append(Path(lock).read_text())
-    declarations = set()
     for contents in texts:
         for group, crossing, name, version in COORDINATE.findall(contents):
             declarations.add((group, crossing, name, version))
-            for coordinate, module in modules.items():
-                if group != module["group"]:
-                    continue
-                matches = name == module["name"] if crossing == ":" else module["name"].startswith(name + "_")
-                if matches:
-                    selected = candidate(version, module["originalVersion"])
-                    if selected:
-                        jvm.validate_coordinates(group, module["name"], selected)
-                        requests[coordinate].add(selected)
-                    else:
-                        raise ValueError(f"native evaluated dependency data is needed for {group}:{name}:{version}")
+    for group, crossing, name, version in declarations:
+        for coordinate, module in modules.items():
+            if group != module["group"]:
+                continue
+            matches = name == module["name"] if crossing == ":" else module["name"].startswith(name + "_")
+            if matches:
+                selected = candidate(version, module["originalVersion"])
+                if selected:
+                    jvm.validate_coordinates(group, module["name"], selected)
+                    requests[coordinate].add(selected)
+                else:
+                    raise ValueError(f"native evaluated dependency data is needed for {group}:{name}:{version}")
     return requests, declarations
 
 
@@ -80,10 +93,10 @@ def replace(path, contents):
         write(checksum, (hashlib.new(algorithm, contents).hexdigest() + "\n").encode())
 
 
-def stage(cache, repository, catalog, sources, lock=None):
+def stage(cache, repository, catalog, sources, lock=None, evaluated=None):
     cache, repository = Path(cache), Path(repository)
     modules = jvm.read_catalogs([{"catalog": str(catalog)}])
-    requests, declarations = source_requests(sources, modules, lock)
+    requests, declarations = source_requests(sources, modules, lock, evaluated)
     roots = {cache / "https/repo1.maven.org/maven2", cache / "https/repo.maven.apache.org/maven2"}
     # Ask native metadata for the cache's repository roots and transitive
     # constraints, rather than assuming every project uses Maven Central.
@@ -177,9 +190,12 @@ def main():
     for option in ("cache", "repository", "catalog", "sources"):
         parser.add_argument("--" + option, type=Path, required=True)
     parser.add_argument("--lock", type=Path)
+    parser.add_argument("--evaluated", type=Path, help="native evaluated dependency JSON; bypass source scanning")
+    parser.add_argument("--bootstrap", action="store_true", help="stage only native and immutable coordinates")
     args = parser.parse_args()
     try:
-        stage(args.cache, args.repository, args.catalog, args.sources, args.lock)
+        evaluated = json.loads(args.evaluated.read_text()) if args.evaluated else ([] if args.bootstrap else None)
+        stage(args.cache, args.repository, args.catalog, args.sources, args.lock, evaluated)
     except (ValueError, KeyError, ET.ParseError) as error:
         parser.exit(1, f"purifier: {error}\n")
 

@@ -70,6 +70,21 @@ class CoursierInputsTest(unittest.TestCase):
         self.assertEqual(original.read_bytes(), b"original locked artifact")
         self.assertEqual(requested.read_bytes(), b"Nix-selected library")
 
+    def test_native_evaluation_handles_computed_versions_without_source_guesses(self):
+        (self.sources / "build.mill").write_text('def mvnDeps = Seq(mvn"example::library:${version}")')
+        (self.sources / "README.md").write_text('example::library:77')
+        evaluated = {"core.mvnDeps": ["example::library:99"], "core.runMvnDeps": []}
+        aliases = coursier_inputs.stage(self.cache, self.repository, self.catalog, self.sources, evaluated=evaluated)
+        expected = "https/repo1.maven.org/maven2/example/library_3/99/library_3-99.jar"
+        self.assertIn(expected, aliases)
+        self.assertFalse((self.cache / "https/repo1.maven.org/maven2/example/library_3/77").exists())
+        self.assertEqual((self.cache / expected).read_bytes(), b"Nix-selected library")
+
+    def test_bootstrap_does_not_parse_unevaluated_declarations(self):
+        (self.sources / "build.mill").write_text('mvn"example::library:${version}"')
+        aliases = coursier_inputs.stage(self.cache, self.repository, self.catalog, self.sources, evaluated=[])
+        self.assertFalse(any("${" in path for path in aliases))
+
     def test_repeated_staging_retains_cache_timestamps(self):
         (self.sources / "build.mill").write_text('def mvnDeps = Seq(mvn"example::library:4.1")')
         self.stage()
