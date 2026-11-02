@@ -279,8 +279,8 @@ other platform tag fails evaluation. It comes from poetry-purifier.
 
 ## Credits
 
-The entry kinds and the tree of fetched entries follow the design of
-[sbt-nix-backend](https://github.com/clhodapp/sbt-nix-backend).
+The purifier idea was inspired by nixcloud's
+[cargo (libnix)](https://github.com/nixcloud/cargo).
 
 ## License
 
