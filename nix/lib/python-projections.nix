@@ -30,6 +30,11 @@ let
     projector = ../../tools/python_repository.py;
     nativeBuildInputs = [ interpreter ];
   } "touch $out";
+  retained = [
+    (toString producer)
+  ]
+  ++ lib.optional (runtimeRepository != null) (toString runtimeRepository)
+  ++ map (input: toString input.repository) selected;
   projection =
     runCommand name
       {
@@ -45,6 +50,8 @@ let
       ''
         python ${../../tools/python_repository.py} --spec "$specPath" \
           --destination "$out" --catalog "$metadata/catalog.json"
+        mkdir -p "$out/nix-support"
+        printf '%s\n' ${lib.escapeShellArgs retained} > "$out/nix-support/inputs"
       '';
 in
 {
