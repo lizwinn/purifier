@@ -424,6 +424,11 @@ def project(spec, maven, ivy, metadata):
         if "nix-support" in path.relative_to(source).parts or not path.is_file():
             continue
         if path.suffix == ".pom":
+            # Maven 4 also installs a classified build POM. It describes the
+            # same component as its consumer POM, not a second publication.
+            primary = path.parent / f"{path.parent.parent.name}-{path.parent.name}.pom"
+            if primary.is_file() and path != primary:
+                continue
             root, properties, coordinates = pom_model(path)
             layout = "maven"
         elif path.name == "ivy.xml" or (path.name.startswith("ivy-") and path.suffix == ".xml"):
@@ -470,11 +475,23 @@ def project(spec, maven, ivy, metadata):
         write(target / f"{name}-{version}.pom", rewrite_pom(root, properties, modules, module))
         if layout == "maven":
             for artifact in sorted(path.parent.iterdir()):
-                if not artifact.is_file() or artifact.suffix in {".pom", ".md5", ".sha1", ".sha256", ".sha512", ".asc"}:
+                if not artifact.is_file() or artifact == path or artifact.suffix in {".md5", ".sha1", ".sha256", ".sha512", ".asc"}:
                     continue
                 if not artifact.name.startswith(name + "-" + old):
                     continue
-                contents = module_metadata(artifact, module, modules, dependency_edges) if artifact.suffix == ".module" else artifact.read_bytes()
+                if artifact.name == f"{name}-{old}-build.pom":
+                    build = ET.parse(artifact, parser=ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))).getroot()
+                    build_properties = dict(properties)
+                    declared = child(build, "properties")
+                    if declared is not None:
+                        build_properties.update({local(e): e.text or "" for e in declared if isinstance(e.tag, str)})
+                    # Build POMs may retain CI-friendly coordinate expressions.
+                    # Bind those coordinates to the native consumer publication.
+                    put(build, "groupId", group)
+                    put(build, "artifactId", name)
+                    contents = rewrite_pom(build, build_properties, modules, module)
+                else:
+                    contents = module_metadata(artifact, module, modules, dependency_edges) if artifact.suffix == ".module" else artifact.read_bytes()
                 write(target / renamed(artifact.name, name, old, version), contents)
         else:
             # Standard sbt/Ivy layout: org/module/revision/{ivys,jars,...}.

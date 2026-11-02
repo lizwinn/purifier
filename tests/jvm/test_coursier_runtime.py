@@ -51,6 +51,19 @@ class RuntimeTest(unittest.TestCase):
         self.assertEqual(graph['modules'], [{'group': 'example', 'name': 'adapter', 'version': '1'},
                                             {'group': 'example', 'name': 'provided', 'version': '0-nix-input'}])
 
+    def test_maven4_build_pom_does_not_replace_its_consumer_pom(self):
+        pom = self.pom('library', '1')
+        jar = pom.with_suffix('.jar')
+        jar.write_bytes(b'library')
+        build = pom.with_name('library-1-build.pom')
+        build.write_text('<project><groupId>example</groupId><artifactId>library</artifactId>'
+                         '<version>${revision}</version><build><plugins/></build></project>')
+        output = self.root / 'runtime'
+        coursier_runtime.export(self.cache, [str(jar)], self.catalog, output)
+        target = output / 'example/library/1'
+        self.assertEqual((target / pom.name).read_bytes(), pom.read_bytes())
+        self.assertEqual((target / build.name).read_bytes(), build.read_bytes())
+
     def test_conflicting_native_versions_are_rejected(self):
         jars = []
         for version in ('1', '2'):

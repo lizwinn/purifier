@@ -13,6 +13,9 @@ def export(cache, classpath, catalog, destination):
     provided = jvm.read_catalogs([{"catalog": str(catalog)}])
     records = {}
     for path in sorted(cache.rglob("*.pom")):
+        primary = path.parent / f"{path.parent.parent.name}-{path.parent.name}.pom"
+        if primary.is_file() and path != primary:
+            continue
         try:
             root, properties, coordinate = jvm.pom_model(path)
         except (ValueError, ET.ParseError):
@@ -54,6 +57,9 @@ def export(cache, classpath, catalog, destination):
         target = directory(coordinate)
         name, version = coordinate[1:]
         jvm.write(target / f"{name}-{version}.pom", path.read_bytes())
+        build = path.with_name(f"{name}-{version}-build.pom")
+        if build.is_file():
+            jvm.write(target / build.name, build.read_bytes())
         richer = path.with_suffix(".module")
         if richer.is_file():
             jvm.write(target / richer.name, richer.read_bytes())
@@ -69,11 +75,14 @@ def export(cache, classpath, catalog, destination):
             if not path.is_file():
                 raise ValueError(f"native runtime classpath entry is missing: {path}")
             matches = []
-            for pom in sorted(path.parent.glob("*.pom")):
-                _, _, coordinate = jvm.pom_model(pom)
+            primary = path.parent / f"{path.parent.parent.name}-{path.parent.name}.pom"
+            poms = [primary] if primary.is_file() else sorted(path.parent.glob("*.pom"))
+            for pom in poms:
+                root, properties, coordinate = jvm.pom_model(pom)
                 name, version = coordinate[1:]
                 if path.name.startswith(name + "-" + version + ".") or path.name.startswith(name + "-" + version + "-"):
                     matches.append(coordinate)
+                    records[coordinate] = pom, root, properties
             if len(matches) != 1:
                 raise ValueError(f"native runtime artifact needs a Maven metadata projection: {path}")
             coordinate = matches[0]

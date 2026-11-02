@@ -64,6 +64,23 @@ class RepositoryTest(unittest.TestCase):
             self.assertIn(b"<project xmlns=", published.read_bytes())
             self.assertEqual(ET.parse(published).getroot().tag, "{" + namespace + "}project")
 
+    def test_maven4_build_pom_is_a_classified_descriptor(self):
+        pom = self.pom("maven4", "library", version="1.0")
+        build = pom.with_name("library-1.0-build.pom")
+        build.write_text(pom.read_text().replace("<version>1.0</version>",
+            "<version>${revision}</version><properties><revision>1.0</revision></properties>")
+            .replace("</project>", "<build><plugins/></build></project>"))
+        projection = self.project("maven4", "maven4-build")
+        modules = json.loads(Path(projection["catalog"]).read_text())["modules"]
+        self.assertEqual(len(modules), 1)
+        revision = modules[0]["version"]
+        published = Path(projection["maven"]) / "example/library" / revision / ("library-" + revision + "-build.pom")
+        self.assertEqual(published.name, "library-" + revision + "-build.pom")
+        root = ET.parse(published).getroot()
+        self.assertEqual(repository.text(root, "version"), revision)
+        self.assertIsNotNone(repository.child(root, "build"))
+        self.assertTrue(published.with_name("library-" + revision + ".pom").is_file())
+
     def test_different_nix_builds_with_same_native_version_do_not_collide(self):
         self.pom("library", "library")
         first = self.project("library", "build-one")
