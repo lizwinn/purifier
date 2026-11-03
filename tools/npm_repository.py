@@ -134,6 +134,14 @@ def fingerprint(start, nodes, owned, provided, identity, projector, runtime):
     return digest(document({"projector": projector, "graph": graph}))
 
 
+def normalize_package_bin(metadata):
+    # package.json accepts a single executable as a string; registry manifests
+    # use its command map. This is also safe for reused immutable archives.
+    if isinstance(metadata.get('bin'), str):
+        metadata['bin'] = {metadata['name'].rsplit('/', 1)[-1]: metadata['bin']}
+    return metadata
+
+
 def project(spec, destination, catalog):
     graph = json.loads(Path(spec['graph']).read_text())
     if graph['version'] != 1:
@@ -168,10 +176,10 @@ def project(spec, destination, catalog):
         filename = 'tarballs/' + digest(document(coordinate)) + '.tgz'
         target = destination / filename
         provided_key = node['name'], node['version']
-        metadata = dict(node['package'])
+        metadata = normalize_package_bin(dict(node['package']))
         if provided_key in provided:
             target.write_bytes(provided[provided_key]['path'].read_bytes())
-            metadata = json.loads(read_archive(provided[provided_key]['path'])['package/package.json'][1])
+            metadata = normalize_package_bin(json.loads(read_archive(provided[provided_key]['path'])['package/package.json'][1]))
         else:
             metadata['version'] = selected[key]
             for field in ('dependencies', 'optionalDependencies', 'peerDependencies'):

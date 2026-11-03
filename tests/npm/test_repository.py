@@ -17,9 +17,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools'))
 import npm_repository as repository
 
 
-def node(root, key, name, dependencies=None, contents=None):
+def node(root, key, name, dependencies=None, contents=None, bin=None):
     metadata = {'name': name, 'version': '1.0.0', 'main': 'index.js',
                 'scripts': {'install': 'exit 99'}, 'dependencies': dependencies or {}}
+    if bin is not None:
+        metadata['bin'] = bin
     files = {'package.json': json.dumps(metadata).encode(), 'index.js': (contents or "module.exports='locked';\n").encode()}
     archive = root / (key + '.tgz')
     with tarfile.open(archive, 'w:gz') as output:
@@ -33,7 +35,7 @@ def node(root, key, name, dependencies=None, contents=None):
 
 def graph(root):
     a = node(root, 'a', 'app', {'library': '>=99', 'alias': 'npm:helper@>=99'},
-             "module.exports=require('library')+':'+require('alias');\n")
+             "module.exports=require('library')+':'+require('alias');\n", bin="index.js")
     b = node(root, 'b', 'library', {'helper': '>=99'}, "module.exports='library '+require('helper');\n")
     c = node(root, 'c', 'helper')
     a['dependencies'] = {'library': {'type': 'prod', 'target': 'b'}, 'alias': {'type': 'prod', 'target': 'c'}}
@@ -64,6 +66,7 @@ class ProjectionTests(unittest.TestCase):
                 self.assertNotIn('install', metadata['scripts'])
             metadata = json.loads(repository.read_archive(destination / next(module['archive'] for module in modules
                 if module['name'] == 'app'))['package/package.json'][1])
+            self.assertEqual(metadata['bin'], {'app':'index.js'})
             self.assertEqual(metadata['dependencies']['library'], versions['library'])
             self.assertEqual(metadata['dependencies']['alias'], 'npm:helper@' + versions['helper'])
             again, _, _ = self.project(root, value, label='again')
@@ -108,6 +111,7 @@ class ProjectionTests(unittest.TestCase):
                 subprocess.run([npm, 'install', '--ignore-scripts', '--no-audit', '--no-fund',
                     '--registry', f'http://127.0.0.1:{server.server_port}/', 'app@' + versions['app']],
                     cwd=consumer, env=env, check=True)
+                self.assertTrue((consumer/'node_modules/.bin/app').is_file())
                 subprocess.run([str(Path(npm).parent / 'node'), '-e',
                     "require('node:assert/strict').equal(require('app'),'library locked:locked')"],
                     cwd=consumer, env=env, check=True)
