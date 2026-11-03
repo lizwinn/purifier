@@ -8,6 +8,7 @@ in
   archives,
   producer,
   roots ? null,
+  intrinsics ? [ ],
   dependencies ? [ ],
   ruby,
   runCommand,
@@ -55,7 +56,12 @@ let
         nativeBuildInputs = [ ruby ];
         spec = builtins.toJSON {
           identity = (inputIdentity identity).hash;
-          inherit archives archiveIdentities roots;
+          inherit
+            archives
+            archiveIdentities
+            roots
+            intrinsics
+            ;
           projectorIdentity = (inputIdentity toolchain).hash;
           dependencies = repositories;
         };

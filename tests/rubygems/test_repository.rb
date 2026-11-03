@@ -22,6 +22,7 @@ Dir.mktmpdir("bundler-nix-input-") do |root|
       s.files=Dir.chdir(directory){Dir["lib/**/*"]}
       s.add_runtime_dependency("nix-input-b","= "+names["nix-input-b"]) if name.end_with?("a")
     end
+    spec.add_runtime_dependency("pathname", ">= 99") if name.end_with?("a")
     filename=Dir.chdir(directory){Gem::Package.build(spec)}
     FileUtils.cp(File.join(directory,filename),File.join(repo,"gems",filename))
     specs << spec
@@ -34,7 +35,9 @@ Dir.mktmpdir("bundler-nix-input-") do |root|
   end
   projection = File.join(root, "projected-repository")
   input = File.join(root, "projection.json")
-  File.write(input, JSON.dump({"identity"=>"abcdef123", "archives"=>Dir[File.join(repo,"gems","*.gem")]}))
+  sdk_spec = Gem::Specification.find_by_name("pathname")
+  sdk = {"name"=>"pathname", "version"=>sdk_spec.version.to_s, "sdk"=>RbConfig::CONFIG.fetch("prefix"), "ruby"=>RUBY_VERSION, "system"=>Gem::Platform.local.to_s, "dependencies"=>[]}
+  File.write(input, JSON.dump({"identity"=>"abcdef123", "archives"=>Dir[File.join(repo,"gems","*.gem")], "intrinsics"=>[sdk]}))
   projector = File.expand_path("../../tools/rubygems_repository.rb", __dir__)
   catalog = File.join(root, "catalog.json")
   raise "projection failed" unless system(Gem.ruby, projector, input, projection, catalog)
