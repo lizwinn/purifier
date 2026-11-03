@@ -177,6 +177,62 @@ in
         touch $out
       '';
 
+  npm-projection =
+    let
+      native = runCommand "native-npm-library" { nativeBuildInputs = [ pkgs.python3 ]; } ''
+        export PYTHONPATH=${../tools}:${./npm}
+        python - <<'PYTHON'
+        import json, os
+        from pathlib import Path
+        from test_repository import graph
+        root = Path(os.environ['out'])
+        root.mkdir()
+        (root / 'graph.json').write_text(json.dumps(graph(root)))
+        PYTHON
+      '';
+      projection =
+        (purifier.npmProjections {
+          graph = "${native}/graph.json";
+          archives = native;
+          producer = native;
+          inherit (pkgs) runCommand python3;
+        }).npm;
+    in
+    runCommand "npm-nix-projection" { nativeBuildInputs = [ pkgs.python3 ]; } ''
+      python - ${projection.catalog} ${projection} <<'PYTHON'
+      import base64, hashlib, json, sys
+      from pathlib import Path
+      catalog = json.load(open(sys.argv[1]))
+      modules = catalog['modules']
+      assert [module['name'] for module in modules if module['primary']] == ['app']
+      assert all('nix.h' in module['version'] for module in modules)
+      for module in modules:
+          data = (Path(sys.argv[2]) / module['archive']).read_bytes()
+          assert module['integrity'] == 'sha512-' + base64.b64encode(hashlib.sha512(data).digest()).decode()
+      retained = (Path(sys.argv[2]) / 'nix-support/inputs').read_text().splitlines()
+      assert '${native}' in retained
+      PYTHON
+      touch $out
+    '';
+
+  npm-repository =
+    pkgs.runCommand "purifier-npm-repository-tests"
+      {
+        nativeBuildInputs = [
+          pkgs.python3
+          pkgs.nodejs
+        ];
+        NPM = "${pkgs.nodejs}/bin/npm";
+      }
+      ''
+        mkdir -p tools tests
+        cp ${../tools/npm_repository.py} tools/npm_repository.py
+        cp -r ${./npm} tests/npm
+        export HOME=$TMPDIR
+        python -B -m unittest discover -s tests/npm -v
+        touch $out
+      '';
+
   python-repository =
     pkgs.runCommand "purifier-python-repository-tests"
       {

@@ -72,6 +72,10 @@ def maven_views(inputs, roots=None):
     return native_views(inputs, 'maven', roots)
 
 
+def npm_views(inputs, roots=None):
+    return native_views(inputs, 'npm', roots)
+
+
 def python_views(inputs, roots=None):
     return native_views(inputs, 'python', roots)
 

@@ -6,6 +6,8 @@
 {
   lockedProjectInputs = import ./locked-project-inputs.nix { inherit lib; };
   projectInputsTool = ../../tools;
+  npmProjections = import ./npm-projections.nix { inherit lib; };
+  npmRepositoryTool = ../../tools/npm_repository.py;
   pythonProjections = import ./python-projections.nix { inherit lib; };
   pythonRepositoryTool = ../../tools/python_repository.py;
   jvmProjections = import ./jvm-projections.nix { inherit lib; };

@@ -233,6 +233,26 @@ package's Maven projection and its catalog together. Consumers record these
 Nix identities separately from artifact downloads and exclude provided
 repository files from the download lock.
 
+### `npmProjections`
+
+`npmProjections { graph; archives; producer ? archives; roots ? null;
+dependencies ? []; runCommand; python3; }` exports `projections.npm`.
+The adapter supplies npm's actual runtime graph and the prepared package
+archives. The result contains native npm tarballs and a catalog of names,
+versions, integrity hashes and primary publications.
+
+Versions encode Nix producer identities and the selected dependency graph.
+Dependency and peer metadata names the exact exported versions, including
+aliases. Foreign package identities follow their content and runtime graph,
+so equivalent dependencies can be shared across producers. Supplied archives
+retain their original bytes. Native build hooks have already run; exports
+contain their results and do not rerun those hooks when installed.
+
+Consumers select this format with `projectInputs` and can realize it through
+`project_inputs.npm_views`. Only Nix source pins belong in the download lock
+for supplied artifacts. Publish the tarballs through a native npm registry;
+ordinary npm consumers need no purifier plugin to install them.
+
 ### `pythonProjections`
 
 `pythonProjections { repository; producer ? repository; runtimeRepository ? null;
