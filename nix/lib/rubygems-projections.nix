@@ -21,6 +21,22 @@ let
     repository = toString input.repository;
     catalog = input.repository.catalog;
   }) selected;
+  toolchain = runCommand "rubygems-projector-toolchain" {
+    projector = ../../tools/rubygems_repository.rb;
+    nativeBuildInputs = [ ruby ];
+  } "touch $out";
+  archiveIdentities = builtins.listToAttrs (
+    map (archive: {
+      name = builtins.unsafeDiscardStringContext (toString archive);
+      value =
+        (inputIdentity (
+          builtins.path {
+            path = archive;
+            name = "gem";
+          }
+        )).hash;
+    }) archives
+  );
   identity = runCommand "${name}-identity" {
     producerIdentity = (inputIdentity producer).hash;
     projector = ../../tools/rubygems_repository.rb;
@@ -38,7 +54,8 @@ let
         nativeBuildInputs = [ ruby ];
         spec = builtins.toJSON {
           identity = (inputIdentity identity).hash;
-          inherit archives;
+          inherit archives archiveIdentities;
+          projectorIdentity = (inputIdentity toolchain).hash;
           dependencies = repositories;
         };
         passAsFile = [ "spec" ];

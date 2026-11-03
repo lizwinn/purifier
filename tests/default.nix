@@ -377,14 +377,24 @@ in
         producer = native;
         inherit (pkgs) ruby runCommand;
       };
+      otherProducer = pkgs.runCommand "independent-rubygems-producer" { } "touch $out";
+      independent = purifier.rubygemsProjections {
+        archives = [ "${native}/native-projection-1.0.0.gem" ];
+        producer = otherProducer;
+        inherit (pkgs) ruby runCommand;
+      };
       consumer = purifier.rubygemsProjections {
         archives = [ ];
         producer = native;
-        dependencies = [ (native // { projections = project; }) ];
+        dependencies = [
+          (native // { projections = project; })
+          (otherProducer // { projections = independent; })
+        ];
         inherit (pkgs) ruby runCommand;
       };
     in
     pkgs.runCommand "rubygems-projection-composition" { } ''
+      cmp ${project.rubygems.catalog} ${independent.rubygems.catalog}
       cmp ${project.rubygems.catalog} ${consumer.rubygems.catalog}
       for archive in ${project.rubygems}/gems/*.gem; do
         cmp "$archive" "${consumer.rubygems}/gems/$(basename "$archive")"

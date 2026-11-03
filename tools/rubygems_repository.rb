@@ -33,9 +33,31 @@ duplicates = packages.group_by { |_, spec| spec.name }.select { |_, values| valu
 raise "multiple gem versions need an explicit projection root: #{duplicates.keys.join(', ')}" unless duplicates.empty?
 suffix = specification.fetch("identity").gsub(/[^a-zA-Z0-9]/, "").downcase
 raise "missing Nix producer identity" if suffix.empty?
-versions = packages.to_h do |_, spec, provided|
-  [spec.name, provided ? spec.version.to_s : "#{spec.version}.nix.h#{suffix}"]
+# Hash the reachable native graph, so independent producers can share an
+# identical prepared dependency without coupling its version to unrelated roots.
+by_name = packages.to_h { |archive, spec, provided| [spec.name, [archive, spec, provided]] }
+versions = packages.to_h do |archive, spec, provided|
+  if provided
+    [spec.name, spec.version.to_s]
+  else
+    reachable = {}
+    visit = lambda do |name|
+      return if reachable.key?(name)
+      item = by_name.fetch(name)
+      reachable[name] = item
+      item[1].runtime_dependencies.each { |dependency| visit.call(dependency.name) if by_name.key?(dependency.name) }
+    end
+    visit.call(spec.name)
+    graph = reachable.keys.sort.map do |name|
+      item_archive, item_spec, item_provided = reachable.fetch(name)
+      seed = item_provided ? item_provided.fetch("integrity") : specification.fetch("archiveIdentities", {}).fetch(item_archive, suffix)
+      [name, item_spec.version.to_s, item_spec.platform.to_s, seed, item_spec.runtime_dependencies.map { |dependency| [dependency.name, dependency.requirement.to_s] }.sort]
+    end
+    fingerprint = Digest::SHA256.hexdigest(JSON.dump([specification.fetch("projectorIdentity", "rubygems-v1"), graph]))
+    [spec.name, "#{spec.version}.nix.h#{fingerprint}"]
+  end
 end
+
 entries = []
 packages.each do |archive, original, provided|
   Dir.mktmpdir("rubygems-projection-") do |directory|
