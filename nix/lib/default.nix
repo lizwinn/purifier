@@ -6,6 +6,7 @@
 {
   lockedProjectInputs = import ./locked-project-inputs.nix { inherit lib; };
   projectInputsTool = ../../tools;
+  testFixtures.nativePythonComposition = ../../tests/python/native_composition.py;
   npmProjections = import ./npm-projections.nix { inherit lib; };
   npmRepositoryTool = ../../tools/npm_repository.py;
   npmCaptureTool = ../../tools/npm_capture.cjs;
