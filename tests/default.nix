@@ -165,6 +165,8 @@ let
         npm pack --pack-destination ../release
         cd ..
         printf '%s' '[{"name":"app","dir":".","archive":"../release/app-1.0.0.tgz"},{"name":"standalone","dir":"packages/standalone","archive":"../release/standalone-1.0.0.tgz"}]' > own.json
+        # A producer can hand capture its immutable built Nix tree.
+        find project library -type d -exec chmod a-w {} +
         node ${purifier.npmCaptureTool} "$PWD/project" "$PWD/release" "$out" "$PWD/own.json"
         python - <<'PYTHON'
         import json, os

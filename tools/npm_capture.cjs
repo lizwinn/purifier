@@ -73,7 +73,6 @@ async function capture(root, release, destination, ownPackages) {
       const own = owned.get(node);
       if (own) {
         await tar.x({file: own.archive ? path.resolve(root, own.archive) : path.join(release, tarballName(own.name)), cwd: temporary, strict: true});
-        fs.rmSync(path.join(directory, 'node_modules'), {recursive: true, force: true});
       } else {
         fs.cpSync(node.path, directory, {recursive: true, dereference: false,
           filter: source => {
@@ -82,6 +81,16 @@ async function capture(root, release, destination, ownPackages) {
             return first !== 'node_modules' && first !== '.git';
           }});
       }
+      // Built Nix trees and their native archives can have read-only directory
+      // modes. Only this owned temporary copy needs write permission; NAR
+      // identity ignores directory modes and keeps file executability intact.
+      function writableDirectories(folder) {
+        fs.chmodSync(folder, fs.statSync(folder).mode | 0o700);
+        for (const entry of fs.readdirSync(folder, {withFileTypes: true}))
+          if (entry.isDirectory()) writableDirectories(path.join(folder, entry.name));
+      }
+      writableDirectories(directory);
+      fs.rmSync(path.join(directory, 'node_modules'), {recursive: true, force: true});
       const metadata = read(path.join(directory, 'package.json'));
       metadata.name = metadata.name || node.name;
       metadata.version = semver.valid(metadata.version) || '0.0.0';
