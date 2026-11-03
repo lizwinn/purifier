@@ -138,6 +138,54 @@ let
   '';
 in
 {
+  npm-input-selection =
+    let
+      repository = pkgs.runCommand "npm-selection-repository" {
+        passthru.catalog = pkgs.writeText "npm-selection.json" (
+          builtins.toJSON {
+            modules = [
+              {
+                name = "primary";
+                version = "1.0.0-nix.h1";
+                primary = true;
+              }
+              {
+                name = "primary";
+                version = "2.0.0-nix.h2";
+                primary = false;
+              }
+              {
+                name = "unique";
+                version = "1.0.0-nix.h1";
+                primary = false;
+              }
+              {
+                name = "ambiguous";
+                version = "1.0.0-nix.h1";
+                primary = false;
+              }
+              {
+                name = "ambiguous";
+                version = "2.0.0-nix.h2";
+                primary = false;
+              }
+            ];
+          }
+        );
+      } "mkdir $out";
+      producer = pkgs.runCommand "npm-selection-producer" {
+        passthru.projections.npm = repository;
+      } "touch $out";
+      selected = purifier.npmInputSelection { dependencies = [ producer ]; };
+    in
+    assert
+      selected.names == [
+        "primary"
+        "unique"
+      ];
+    assert builtins.length selected.versions == 5;
+    pkgs.runCommand "npm-input-selection-check" { } "touch $out";
+
   npm-capture =
     pkgs.runCommand "npm-native-graph-capture"
       {
