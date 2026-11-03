@@ -103,7 +103,10 @@ specs = entries.map { |entry| [entry.fetch("name"), Gem::Version.new(entry.fetch
   "latest_specs" => specs.reject { |_, version, _| version.prerelease? }.group_by { |name, _, platform| [name, platform] }.values.map { |values| values.max_by { |_, version, _| version } }.sort,
   "prerelease_specs" => specs.select { |_, version, _| version.prerelease? },
 }.each do |kind, values|
-  Zlib::GzipWriter.open(File.join(destination, "#{kind}.4.8.gz")) { |writer| writer.write(Marshal.dump(values)) }
+  Zlib::GzipWriter.open(File.join(destination, "#{kind}.4.8.gz")) do |writer|
+    writer.mtime = 0
+    writer.write(Marshal.dump(values))
+  end
 end
 FileUtils.mkdir_p(File.dirname(catalog_path))
 File.write(catalog_path, JSON.pretty_generate({ "format" => "rubygems", "packages" => entries }) + "\n")

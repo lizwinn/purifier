@@ -52,6 +52,13 @@ Dir.mktmpdir("bundler-nix-input-") do |root|
   File.write(input, JSON.dump({"identity"=>"rooted", "archives"=>[], "roots"=>["nix-input-b"], "dependencies"=>[{"repository"=>projection,"catalog"=>catalog}]}))
   raise "root selection failed" unless system(Gem.ruby, projector, input, rooted, rooted_catalog)
   raise "unrelated publication retained" unless JSON.parse(File.read(rooted_catalog)).fetch("packages").map { |entry| entry.fetch("name") } == ["nix-input-b"]
+  %w[specs latest_specs prerelease_specs].each do |kind|
+    index = "#{kind}.4.8.gz"
+    raise "repository index changed during reuse" unless File.binread(File.join(projection,index)) == File.binread(File.join(reused,index))
+    Zlib::GzipReader.open(File.join(projection,index)) do |reader|
+      raise "repository index has a wall-clock timestamp" unless reader.mtime.to_i == 0
+    end
+  end
   repo = reused
   ordinary=File.join(root,"ordinary-registry")
   FileUtils.mkdir_p(ordinary)
