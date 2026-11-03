@@ -10,6 +10,7 @@
   npmProjections = import ./npm-projections.nix { inherit lib; };
   npmRepositoryTool = ../../tools/npm_repository.py;
   npmCaptureTool = ../../tools/npm_capture.cjs;
+  npmInstallRepository = import ./npm-install-repository.nix { inherit lib; };
   npmInputSelection = import ./npm-input-selection.nix { inherit lib; };
   pythonProjections = import ./python-projections.nix { inherit lib; };
   pythonRepositoryTool = ../../tools/python_repository.py;

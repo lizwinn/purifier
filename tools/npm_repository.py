@@ -225,13 +225,42 @@ def project(spec, destination, catalog):
     catalog.write_text(json.dumps({'version': 1, 'modules': [publications[key] for key in sorted(publications)]}, sort_keys=True) + '\n')
 
 
+def install_repository(spec, destination, catalog):
+    """Adapt dependency metadata for native installers without resolver hooks.
+
+    This view is only for installation. Publication retains the original
+    immutable archives and their native version requirements.
+    """
+    modules, _ = supplied(spec['views'])
+    publications = []
+    destination.mkdir(parents=True, exist_ok=True)
+    for key, module in sorted(modules.items()):
+        metadata = json.loads(read_archive(module['path'])['package/package.json'][1])
+        for field in ('dependencies', 'optionalDependencies', 'peerDependencies'):
+            for alias, wanted in list(metadata.get(field, {}).items()):
+                match = re.fullmatch(r'npm:(@[^/]+/[^@]+|[^@]+)@(.+)', wanted)
+                dependency = modules.get((match[1], match[2]) if match else (alias, wanted))
+                if dependency:
+                    metadata[field][alias] = 'file:' + str(destination / dependency['archive'])
+        target = destination / module['archive']
+        target.parent.mkdir(parents=True, exist_ok=True)
+        rewrite(module['path'], target, metadata)
+        entry = {name: value for name, value in module.items() if name != 'path'}
+        entry['package'] = metadata
+        entry['integrity'] = 'sha512-' + base64.b64encode(hashlib.sha512(target.read_bytes()).digest()).decode()
+        publications.append(entry)
+    catalog.parent.mkdir(parents=True, exist_ok=True)
+    catalog.write_text(json.dumps({'version': 1, 'modules': publications}, sort_keys=True) + '\n')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--install', action='store_true')
     parser.add_argument('--spec', type=Path, required=True)
     parser.add_argument('--destination', type=Path, required=True)
     parser.add_argument('--catalog', type=Path, required=True)
     args = parser.parse_args()
-    project(json.loads(args.spec.read_text()), args.destination, args.catalog)
+    (install_repository if args.install else project)(json.loads(args.spec.read_text()), args.destination, args.catalog)
 
 
 if __name__ == '__main__':
