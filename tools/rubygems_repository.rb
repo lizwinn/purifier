@@ -29,6 +29,20 @@ specification.fetch("dependencies", []).each do |input|
   end
 end
 packages = packages.uniq { |archive, spec, _| [spec.name, spec.version, Digest::SHA512.file(archive).hexdigest] }
+if (roots = specification["roots"])
+  candidates = packages.group_by { |_, spec, _| spec.name }
+  selected = {}
+  visit = lambda do |name|
+    return if selected.key?(name)
+    raise "missing RubyGems projection root #{name}" unless candidates.key?(name)
+    selected[name] = true
+    candidates.fetch(name).each do |_, spec, _|
+      spec.runtime_dependencies.each { |dependency| visit.call(dependency.name) if candidates.key?(dependency.name) }
+    end
+  end
+  roots.each { |name| visit.call(name) }
+  packages.select! { |_, spec, _| selected.key?(spec.name) }
+end
 duplicates = packages.group_by { |_, spec| spec.name }.select { |_, values| values.size > 1 }
 raise "multiple gem versions need an explicit projection root: #{duplicates.keys.join(', ')}" unless duplicates.empty?
 suffix = specification.fetch("identity").gsub(/[^a-zA-Z0-9]/, "").downcase

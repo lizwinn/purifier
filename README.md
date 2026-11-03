@@ -255,13 +255,14 @@ ordinary npm consumers need no purifier plugin to install them.
 
 ### `rubygemsProjections`
 
-`rubygemsProjections { archives; producer; dependencies ? [];
+`rubygemsProjections { archives; producer; roots ? null; dependencies ? [];
 ruby; runCommand; }` exports `projections.rubygems` with a `catalog` attribute.
 Pass native `.gem` archive paths and the Nix producer that owns them.
 The adapter uses RubyGems to rebuild owned packages with Nix-derived versions
 and exact runtime requirements for supplied gems. Dependency projections keep
 their archive bytes and versions; their integrity and native coordinates are
-validated before reuse. Ordinary Bundler consumers can install the repository.
+validated before reuse. `roots` selects publications and their runtime closure.
+Ordinary Bundler consumers can install the repository.
 
 The caller supplies prepared archives for its target Ruby and platform.
 This adapter does not compile extensions or capture an installed bundle.

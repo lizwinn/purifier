@@ -47,6 +47,11 @@ Dir.mktmpdir("bundler-nix-input-") do |root|
   Dir[File.join(projection,"gems","*.gem")].each do |archive|
     raise "provided archive changed" unless File.binread(archive) == File.binread(File.join(reused,"gems",File.basename(archive)))
   end
+  rooted = File.join(root, "rooted-repository")
+  rooted_catalog = File.join(root, "rooted-catalog.json")
+  File.write(input, JSON.dump({"identity"=>"rooted", "archives"=>[], "roots"=>["nix-input-b"], "dependencies"=>[{"repository"=>projection,"catalog"=>catalog}]}))
+  raise "root selection failed" unless system(Gem.ruby, projector, input, rooted, rooted_catalog)
+  raise "unrelated publication retained" unless JSON.parse(File.read(rooted_catalog)).fetch("packages").map { |entry| entry.fetch("name") } == ["nix-input-b"]
   repo = reused
   ordinary=File.join(root,"ordinary-registry")
   FileUtils.mkdir_p(ordinary)
