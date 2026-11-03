@@ -415,14 +415,21 @@ fails evaluation.
 
 ```nix
 wheels { pythonVersion, arch, glibcVersion } fileName
+wheels { pythonVersion, arch = "arm64", macosVersion } fileName
 ```
 
 Whether the Python wheel `fileName` installs with Python `pythonVersion`
-on Linux for the CPU `arch` and glibc `glibcVersion`, read from the
+on Linux for the CPU `arch` and glibc `glibcVersion`, or on an arm64 Mac
+whose system supports macOS `macosVersion` and later, read from the
 compatibility tags in its file name (PEP 425 and PEP 600). `pythonVersion`
 is a version such as `"3.14"`, `arch` is the CPU name of a wheel's
-platform tag such as `"x86_64"` or `"aarch64"`, and `glibcVersion` is a
-version such as `"2.40"`. It comes from uv-purifier.
+platform tag such as `"x86_64"`, `"aarch64"` or `"arm64"`, and
+`glibcVersion` is a version such as `"2.40"`. `macosVersion` is a version
+such as `"14.0"`, usually nixpkgs' `stdenv.hostPlatform.darwinMinVersion`.
+A macOS wheel installs there when packaging's `mac_platforms` lists its
+tag for that version: `macosx_<N>_0` for `arm64` or `universal2` from 11
+up to it, or `universal2` for a macOS 10 release. It comes from
+uv-purifier.
 
 ### `wheelName`
 

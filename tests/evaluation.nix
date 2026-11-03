@@ -127,6 +127,13 @@ let
     glibcVersion = "2.40";
   };
 
+  # The same Python on an arm64 Mac whose system supports macOS 14.0.
+  installsOnMacos = purifier.wheels {
+    pythonVersion = "3.14";
+    arch = "arm64";
+    macosVersion = "14.0";
+  };
+
   # The cases of poetry-purifier's tests of wheel-name.nix.
   wheelName = purifier.wheelName {
     pythonVersion = "3.13";
@@ -924,6 +931,54 @@ let
         true
         false
       ];
+    };
+
+    testWheelsMacos = {
+      expr = map installsOnMacos [
+        "attrs-25.3.0-py3-none-any.whl"
+        "msgpack-1.1.2-cp314-cp314-macosx_11_0_arm64.whl"
+        "numpy-2.3.4-cp314-cp314-macosx_14_0_arm64.whl"
+        "msgpack-1.1.2-cp314-cp314-macosx_10_13_universal2.whl"
+        "cryptography-46.0.3-cp311-abi3-macosx_10_9_universal2.whl"
+        "numpy-2.3.4-cp314-cp314-macosx_15_0_arm64.whl"
+        "numpy-2.3.4-cp314-cp314-macosx_11_1_arm64.whl"
+        "msgpack-1.1.2-cp314-cp314-macosx_10_13_x86_64.whl"
+        "msgpack-1.1.2-cp313-cp313-macosx_11_0_arm64.whl"
+        "pydantic_core-2.41.4-cp314-cp314-manylinux_2_17_aarch64.manylinux2014_aarch64.whl"
+      ];
+      expected = [
+        true
+        true
+        true
+        true
+        true
+        # macOS 15 is later than the system's oldest macOS.
+        false
+        # packaging lists only macosx_<release>_0 from macOS 11 on.
+        false
+        false
+        false
+        false
+      ];
+    };
+    testWheelsMacosOtherCpu = {
+      expr = fails (
+        purifier.wheels {
+          pythonVersion = "3.14";
+          arch = "x86_64";
+          macosVersion = "14.0";
+        }
+      );
+      expected = true;
+    };
+    testWheelsNeedsSystem = {
+      expr = fails (
+        purifier.wheels {
+          pythonVersion = "3.14";
+          arch = "x86_64";
+        }
+      );
+      expected = true;
     };
 
     testWheelName = {

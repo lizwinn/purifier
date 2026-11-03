@@ -1,17 +1,22 @@
 # SPDX-License-Identifier: MIT
 #
-# Whether a wheel installs with a given Python on a given Linux system, read
-# from the compatibility tags in its file name (PEP 425 and PEP 600). The
-# build uses this to choose which locked files to fetch for a system: the
-# wheels that install, and the sdist of a package with no such wheel. uv
-# makes the final choice among the fetched wheels when it installs.
+# Whether a wheel installs with a given Python on a given Linux or macOS
+# system, read from the compatibility tags in its file name (PEP 425 and
+# PEP 600). The build uses this to choose which locked files to fetch for a
+# system: the wheels that install, and the sdist of a package with no such
+# wheel. uv makes the final choice among the fetched wheels when it
+# installs.
 {
   # The Python version, such as "3.14".
   pythonVersion,
-  # The CPU name in a wheel's platform tag, such as "x86_64" or "aarch64".
+  # The CPU name in a wheel's platform tag: "x86_64" or "aarch64" on Linux,
+  # "arm64" on macOS.
   arch,
-  # The glibc version of the system, such as "2.40".
-  glibcVersion,
+  # The glibc version of a Linux system, such as "2.40".
+  glibcVersion ? null,
+  # The oldest macOS version that a macOS system supports, such as "14.0"
+  # (nixpkgs' darwinMinVersion); null on Linux.
+  macosVersion ? null,
 }:
 let
   inherit (builtins)
@@ -58,7 +63,33 @@ let
     in
     m != null && fromJSON (elemAt m 0) <= minor;
 
-  platformMatches =
+  macosRelease = fromJSON (elemAt (splitOn "." macosVersion) 0);
+
+  # The wheels for macOS that install on an arm64 Mac running macosVersion,
+  # as packaging.tags.mac_platforms lists them: from macOS 11 on, a release
+  # counts the major version, so macosx_<release>_0 for arm64 or universal2
+  # from 11 to macosVersion. A universal2 wheel can also name a macOS 10
+  # release, for its x86_64 half.
+  macosMatches =
+    tag:
+    let
+      m = match "macosx_([0-9]+)_([0-9]+)_(.+)" tag;
+      release = fromJSON (elemAt m 0);
+      update = fromJSON (elemAt m 1);
+      format = elemAt m 2;
+    in
+    m != null
+    && (
+      (
+        release >= 11
+        && release <= macosRelease
+        && update == 0
+        && (format == arch || format == "universal2")
+      )
+      || (release == 10 && update >= 4 && update <= 16 && format == "universal2")
+    );
+
+  linuxMatches =
     tag:
     let
       legacy = {
@@ -69,10 +100,12 @@ let
       # manylinux_2_N: glibc 2.N or later.
       perennial = match "manylinux_2_([0-9]+)_${arch}" tag;
     in
-    tag == "any"
-    || tag == "linux_${arch}"
+    tag == "linux_${arch}"
     || (legacy ? ${tag} && legacy.${tag} <= glibcMinor)
     || (perennial != null && fromJSON (elemAt perennial 0) <= glibcMinor);
+
+  platformMatches =
+    tag: tag == "any" || (if macosVersion != null then macosMatches tag else linuxMatches tag);
 
   tagsMatch =
     python: abi: platform:
@@ -83,6 +116,14 @@ let
       || (abi == cpython && python == cpython)
     );
 in
+assert
+  glibcVersion != null
+  || macosVersion != null
+  || throw "purifier: wheels: takes glibcVersion on Linux or macosVersion on macOS";
+assert
+  macosVersion == null
+  || (arch == "arm64" && macosRelease >= 11)
+  || throw "purifier: wheels: on macOS, wheels are chosen for arm64 and macOS 11 or later, not ${arch} and ${macosVersion}";
 fileName:
 let
   stem = substring 0 (stringLength fileName - 4) fileName;
