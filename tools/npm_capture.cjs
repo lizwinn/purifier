@@ -23,6 +23,19 @@ async function capture(root, release, destination, ownPackages) {
     candidates.set(fs.realpathSync(node.path), node);
   }
   candidates.set(fs.realpathSync(tree.path), tree);
+  // pnpm workspaces need not be reachable from the workspace root's
+  // package.json. Ask the native graph reader about those roots as well.
+  for (const pkg of ownPackages) {
+    const directory = fs.realpathSync(path.resolve(root, pkg.dir || '.'));
+    if (candidates.has(directory)) continue;
+    const workspace = await new Arborist({path: directory}).loadActual();
+    for (const item of workspace.inventory.values()) {
+      const node = item.target;
+      const location = fs.realpathSync(node.path);
+      if (!candidates.has(location)) candidates.set(location, node);
+    }
+    candidates.set(directory, workspace);
+  }
   const owned = new Map();
   for (const pkg of ownPackages) {
     const directory = fs.realpathSync(path.resolve(root, pkg.dir || '.'));
@@ -33,7 +46,7 @@ async function capture(root, release, destination, ownPackages) {
   const nodes = new Map();
   const keyOf = node => path.relative(root, node.target.path).replaceAll(path.sep, '/') || '.';
   function visit(node) {
-    node = node.target;
+    node = candidates.get(fs.realpathSync(node.target.path)) || node.target;
     const key = keyOf(node);
     if (nodes.has(key)) return;
     const dependencies = {};

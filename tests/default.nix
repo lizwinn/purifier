@@ -153,20 +153,24 @@ in
         export npm_config_offline=true
         export NPM_PURIFIER_NPM_MODULES=${pkgs.nodejs}/lib/node_modules/npm/node_modules
         export NPM_PROJECTION_NIX=${pkgs.nix}/bin/nix
-        mkdir -p "$HOME" project library release
+        mkdir -p "$HOME" project library release project/packages/standalone
         printf '%s' '{"name":"library","version":"1.0.0"}' > library/package.json
         printf '%s' '{"name":"app","version":"1.0.0","dependencies":{"library":"file:../library"}}' > project/package.json
+        printf '%s' '{"name":"standalone","version":"1.0.0"}' > project/packages/standalone/package.json
+        cd project/packages/standalone
+        npm pack --pack-destination ../../../release
+        cd ../../..
         cd project
         npm install --ignore-scripts --no-audit --no-fund
         npm pack --pack-destination ../release
         cd ..
-        printf '%s' '[{"name":"app","dir":".","archive":"../release/app-1.0.0.tgz"}]' > own.json
+        printf '%s' '[{"name":"app","dir":".","archive":"../release/app-1.0.0.tgz"},{"name":"standalone","dir":"packages/standalone","archive":"../release/standalone-1.0.0.tgz"}]' > own.json
         node ${purifier.npmCaptureTool} "$PWD/project" "$PWD/release" "$out" "$PWD/own.json"
         python - <<'PYTHON'
         import json, os
         from pathlib import Path
         graph=json.loads((Path(os.environ['out'])/'graph.json').read_text())
-        assert {item['name'] for item in graph['nodes'].values()}=={'app','library'}
+        assert {item['name'] for item in graph['nodes'].values()}=={'app','library','standalone'}
         assert graph['nodes'][graph['primaries']['app']]['dependencies']['library']['type']=='prod'
         assert all(item['contentHash'].startswith('sha256-') for item in graph['nodes'].values())
         PYTHON
