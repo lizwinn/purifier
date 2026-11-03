@@ -18,14 +18,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools'))
 import python_repository as repository
 
 
-def fixture(directory, name, version='1.0', requires=(), data=False):
+def fixture(directory, name, version='1.0', requires=(), data=False, tag='py3-none-any'):
     directory.mkdir(parents=True, exist_ok=True)
     info = name + '-' + version + '.dist-info'
     contents = {
         name + '/__init__.py': 'VALUE = ' + repr(name) + '\n',
         info + '/METADATA': 'Metadata-Version: 2.1\nName: ' + name + '\nVersion: ' + version + '\n'
             + 'Provides-Extra: feature\n' + ''.join('Requires-Dist: ' + req + '\n' for req in requires) + '\n',
-        info + '/WHEEL': 'Wheel-Version: 1.0\nGenerator: purifier-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n',
+        info + '/WHEEL': 'Wheel-Version: 1.0\nGenerator: purifier-test\nRoot-Is-Purelib: true\nTag: ' + tag + '\n',
     }
     if data:
         contents[name + '-' + version + '.data/data/example.txt'] = 'payload\n'
@@ -36,7 +36,7 @@ def fixture(directory, name, version='1.0', requires=(), data=False):
         record.writerow([path, 'sha256=' + digest, len(content.encode())])
     record.writerow([info + '/RECORD', '', ''])
     contents[info + '/RECORD'] = output.getvalue()
-    wheel = directory / (name + '-' + version + '-py3-none-any.whl')
+    wheel = directory / (name + '-' + version + '-' + tag + '.whl')
     with zipfile.ZipFile(wheel, 'w') as archive:
         for path, content in contents.items():
             archive.writestr(path, content)
@@ -44,6 +44,16 @@ def fixture(directory, name, version='1.0', requires=(), data=False):
 
 
 class ProjectionTests(unittest.TestCase):
+    def test_explicit_target_tags_select_the_project_abi(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)
+            target=fixture(root,'library',tag='cp312-cp312-linux_x86_64')
+            sdk=fixture(root,'library',tag='cp314-cp314-linux_x86_64')
+            catalog=root/'catalog.json'
+            catalog.write_text(json.dumps({'version':1,'modules':[{'name':'library','version':'1.0','wheels':[sdk.name,target.name]}]}))
+            selected=repository.selections([{'repository':str(root),'catalog':str(catalog)}], ['cp312-cp312-linux_x86_64'])
+            self.assertEqual(selected['library']['wheel'],target)
+
     def test_transitive_override_and_ordinary_installer(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

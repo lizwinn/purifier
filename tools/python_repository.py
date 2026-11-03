@@ -8,17 +8,34 @@ from email.parser import BytesParser
 import hashlib
 import io
 import json
+import subprocess
 from pathlib import Path
 import zipfile
 
+import packaging
 from packaging.requirements import Requirement
 from packaging.tags import sys_tags
 from packaging.utils import canonicalize_name, parse_wheel_filename
 from packaging.version import Version
 
 
-def selections(views):
-    tags = {tag: index for index, tag in enumerate(sys_tags())}
+def interpreter_tags(python):
+    """Ask the target interpreter about its ABI without exposing SDK packages."""
+    script = """import importlib.util,json,sys
+root=sys.argv[1]
+spec=importlib.util.spec_from_file_location('packaging',root+'/__init__.py',submodule_search_locations=[root])
+module=importlib.util.module_from_spec(spec)
+sys.modules['packaging']=module
+spec.loader.exec_module(module)
+from packaging.tags import sys_tags
+print(json.dumps([str(tag) for tag in sys_tags()]))
+"""
+    return json.loads(subprocess.check_output([str(python), '-I', '-c', script,
+        str(Path(packaging.__file__).parent)], text=True))
+
+
+def selections(views, compatible_tags=None):
+    tags = {str(tag): index for index, tag in enumerate(sys_tags() if compatible_tags is None else compatible_tags)}
     result = {}
     for view in views:
         catalog = json.loads(Path(view['catalog']).read_text())
@@ -32,7 +49,7 @@ def selections(views):
                 wheel_name, version, build, wheel_tags = parse_wheel_filename(filename)
                 if wheel_name != name or str(version) != module['version']:
                     raise ValueError(f'Python catalog disagrees with wheel {path}')
-                ranks = [tags[tag] for tag in wheel_tags if tag in tags]
+                ranks = [tags[str(tag)] for tag in wheel_tags if str(tag) in tags]
                 if ranks:
                     candidates.append((min(ranks), build, path))
             if not candidates:

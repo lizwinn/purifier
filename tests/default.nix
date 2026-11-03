@@ -319,6 +319,24 @@ in
         touch $out
       '';
 
+  python-target-tags =
+    pkgs.runCommand "python-target-interpreter-tags"
+      {
+        nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.packaging ])) ];
+        targetPython = pkgs.python312.interpreter;
+      }
+      ''
+        export PYTHONPATH=${../tools}
+        python - <<'PYTHON'
+        import os
+        from python_repository import interpreter_tags
+        tags=interpreter_tags(os.environ['targetPython'])
+        assert tags[0].startswith('cp312-cp312-'), tags[0]
+        assert not any(tag.startswith('cp314-') for tag in tags)
+        PYTHON
+        touch "$out"
+      '';
+
   python-repository =
     pkgs.runCommand "purifier-python-repository-tests"
       {
