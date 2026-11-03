@@ -6,8 +6,9 @@ entries. This library turns each entry into a store path, and lays a list
 of entries out as one directory tree. It also holds the platform and wheel
 helpers that more than one purifier needs.
 
-The nix-purifiers family targets x86_64-linux and aarch64-linux. Every
-purifier meets the contract in [CONTRACT.md](CONTRACT.md).
+The nix-purifiers family targets x86_64-linux and aarch64-linux, and
+this library also supports aarch64-darwin. Every purifier meets the
+contract in [CONTRACT.md](CONTRACT.md).
 
 ## Use
 
@@ -398,7 +399,9 @@ strings, with the meanings npm gives them:
 
 x86_64-linux has the os `linux`, the cpu `x64` and the libc `glibc`.
 aarch64-linux has the os `linux`, the cpu `arm64` and the libc `glibc`.
-Any other system fails evaluation.
+aarch64-darwin has the os `darwin`, the cpu `arm64` and no libc, so any
+libc filter that is not null refuses it, as npm does. Any other system
+fails evaluation.
 
 ### `wheels`
 

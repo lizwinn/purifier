@@ -9,6 +9,10 @@
 #   - a list with names that have no "!" admits only the systems it names;
 #   - a list of only names with "!" admits every system it does not name.
 #
+# A system without a libc family, such as darwin, has the libc null, and
+# there any libc filter that is not null refuses, even an empty list or
+# [ "any" ], as npm's checkPlatform does.
+#
 # The systems are those of the nix-purifiers family.
 { lib }:
 let
@@ -32,6 +36,11 @@ let
       os = "linux";
       cpu = "arm64";
       libc = "glibc";
+    };
+    aarch64-darwin = {
+      os = "darwin";
+      cpu = "arm64";
+      libc = null;
     };
   };
 
@@ -65,5 +74,13 @@ let
 in
 # An unknown system fails even when no filter needs its names.
 builtins.seq platform (
-  allows "os" platform.os os && allows "cpu" platform.cpu cpu && allows "libc" platform.libc libc
+  allows "os" platform.os os
+  && allows "cpu" platform.cpu cpu
+  && (
+    if platform.libc == null then
+      # allows still checks the filter's type, so a bad filter fails here too.
+      builtins.seq (allows "libc" "none" libc) (libc == null)
+    else
+      allows "libc" platform.libc libc
+  )
 )
