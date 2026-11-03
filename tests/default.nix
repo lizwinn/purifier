@@ -349,6 +349,64 @@ in
       touch $out
     '';
 
+  rubygems-projection =
+    let
+      native =
+        pkgs.runCommand "native-rubygems-producer"
+          {
+            nativeBuildInputs = [ pkgs.ruby ];
+          }
+          ''
+            mkdir -p lib "$out"
+            echo 'NativeProjection = 42' > lib/native_projection.rb
+            ruby -e '
+              require "rubygems/package"
+              spec = Gem::Specification.new do |s|
+                s.name = "native-projection"
+                s.version = "1.0.0"
+                s.authors = ["fixture"]
+                s.summary = "Native projection fixture"
+                s.files = ["lib/native_projection.rb"]
+              end
+              Gem::Package.build(spec)
+            '
+            cp native-projection-1.0.0.gem "$out/"
+          '';
+      project = purifier.rubygemsProjections {
+        archives = [ "${native}/native-projection-1.0.0.gem" ];
+        producer = native;
+        inherit (pkgs) ruby runCommand;
+      };
+      consumer = purifier.rubygemsProjections {
+        archives = [ ];
+        producer = native;
+        dependencies = [ (native // { projections = project; }) ];
+        inherit (pkgs) ruby runCommand;
+      };
+    in
+    pkgs.runCommand "rubygems-projection-composition" { } ''
+      cmp ${project.rubygems.catalog} ${consumer.rubygems.catalog}
+      for archive in ${project.rubygems}/gems/*.gem; do
+        cmp "$archive" "${consumer.rubygems}/gems/$(basename "$archive")"
+      done
+      grep -F '${native}' ${consumer.rubygems}/nix-support/inputs
+      touch "$out"
+    '';
+
+  rubygems-repository =
+    pkgs.runCommand "purifier-rubygems-repository-tests"
+      {
+        nativeBuildInputs = [ pkgs.ruby ];
+      }
+      ''
+        mkdir -p tools tests/rubygems
+        cp ${../tools/rubygems_repository.rb} tools/rubygems_repository.rb
+        cp ${./rubygems/test_repository.rb} tests/rubygems/test_repository.rb
+        export HOME=$TMPDIR
+        ruby tests/rubygems/test_repository.rb
+        touch $out
+      '';
+
   npm-repository =
     pkgs.runCommand "purifier-npm-repository-tests"
       {
