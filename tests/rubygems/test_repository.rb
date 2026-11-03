@@ -38,6 +38,9 @@ Dir.mktmpdir("bundler-nix-input-") do |root|
   projector = File.expand_path("../../tools/rubygems_repository.rb", __dir__)
   catalog = File.join(root, "catalog.json")
   raise "projection failed" unless system(Gem.ruby, projector, input, projection, catalog)
+  JSON.parse(File.read(catalog)).fetch("packages").each do |entry|
+    raise "projected version regressed behind its source" unless Gem::Version.new(entry.fetch("version")) > Gem::Version.new(entry.fetch("sourceVersion"))
+  end
   names = JSON.parse(File.read(catalog)).fetch("packages").to_h { |entry| [entry.fetch("name"), entry.fetch("version")] }
   reused = File.join(root, "reused-repository")
   reused_catalog = File.join(root, "reused-catalog.json")

@@ -68,7 +68,7 @@ versions = packages.to_h do |archive, spec, provided|
       [name, item_spec.version.to_s, item_spec.platform.to_s, seed, item_spec.runtime_dependencies.map { |dependency| [dependency.name, dependency.requirement.to_s] }.sort]
     end
     fingerprint = Digest::SHA256.hexdigest(JSON.dump([specification.fetch("projectorIdentity", "rubygems-v1"), graph]))
-    [spec.name, "#{spec.version}.nix.h#{fingerprint}"]
+    [spec.name, "#{spec.version}.1.nix.h#{fingerprint}"]
   end
 end
 
