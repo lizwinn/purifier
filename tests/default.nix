@@ -138,6 +138,40 @@ let
   '';
 in
 {
+  npm-capture =
+    pkgs.runCommand "npm-native-graph-capture"
+      {
+        nativeBuildInputs = [
+          pkgs.nodejs
+          pkgs.nix
+          pkgs.python3
+        ];
+      }
+      ''
+        export HOME="$TMPDIR/home"
+        export npm_config_cache="$TMPDIR/cache"
+        export npm_config_offline=true
+        export NPM_PURIFIER_NPM_MODULES=${pkgs.nodejs}/lib/node_modules/npm/node_modules
+        export NPM_PROJECTION_NIX=${pkgs.nix}/bin/nix
+        mkdir -p "$HOME" project library release
+        printf '%s' '{"name":"library","version":"1.0.0"}' > library/package.json
+        printf '%s' '{"name":"app","version":"1.0.0","dependencies":{"library":"file:../library"}}' > project/package.json
+        cd project
+        npm install --ignore-scripts --no-audit --no-fund
+        npm pack --pack-destination ../release
+        cd ..
+        printf '%s' '[{"name":"app","dir":".","archive":"../release/app-1.0.0.tgz"}]' > own.json
+        node ${purifier.npmCaptureTool} "$PWD/project" "$PWD/release" "$out" "$PWD/own.json"
+        python - <<'PYTHON'
+        import json, os
+        from pathlib import Path
+        graph=json.loads((Path(os.environ['out'])/'graph.json').read_text())
+        assert {item['name'] for item in graph['nodes'].values()}=={'app','library'}
+        assert graph['nodes'][graph['primaries']['app']]['dependencies']['library']['type']=='prod'
+        assert all(item['contentHash'].startswith('sha256-') for item in graph['nodes'].values())
+        PYTHON
+      '';
+
   python-projection =
     let
       interpreter = pkgs.python3.withPackages (ps: [
