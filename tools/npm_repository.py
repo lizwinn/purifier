@@ -121,6 +121,8 @@ def fingerprint(start, nodes, owned, provided, identity, projector, runtime):
             entry['native'] = {'kind': node['native'], 'os': runtime['os'], 'cpu': runtime['cpu']}
             if node['native'] == 'node-addon':
                 entry['native']['nodeMajor'] = runtime['nodeMajor']
+                if runtime.get('nodeAbi') is not None:
+                    entry['native']['nodeAbi'] = runtime['nodeAbi']
         entry['dependencies'] = []
         for name, edge in sorted(node.get('dependencies', {}).items()):
             target = edge['target']

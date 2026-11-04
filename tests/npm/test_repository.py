@@ -149,6 +149,22 @@ class ProjectionTests(unittest.TestCase):
             changed = next(module for module in other if module['name'] == 'helper')
             self.assertNotEqual(helper['version'], changed['version'])
 
+    def test_target_abi_changes_identity_but_helper_runtime_does_not(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            value = graph(root)
+            value['nodes']['c']['native'] = 'node-addon'
+            value['nodeAbi'] = '72'
+            _, _, first = self.project(root, value)
+            value['helperRuntime'] = {'version': '99.0.0', 'abi': '999'}
+            _, _, second = self.project(root, value, label='other-helper')
+            self.assertEqual([item['version'] for item in first], [item['version'] for item in second])
+            value['nodeAbi'] = '73'
+            _, _, third = self.project(root, value, label='other-target-abi')
+            first_versions = {item['name']: item['version'] for item in first}
+            third_versions = {item['name']: item['version'] for item in third}
+            self.assertNotEqual(first_versions['helper'], third_versions['helper'])
+
     def test_namespace_versions_follow_native_semver(self):
         self.assertRegex(repository.version('1.2.3-beta.1+build', 'a' * 64), r'^1[.]2[.]3-beta[.]1[.]nix[.]h')
         for invalid in ('1.0', '01.0.0', '1.0.0-01', '1.0.0-a..b', '1.0.0+build.'):

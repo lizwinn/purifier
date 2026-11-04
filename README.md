@@ -254,6 +254,14 @@ Consumers select this format with `projectInputs` and can realize it through
 for supplied artifacts. Publish the tarballs through a native npm registry;
 ordinary npm consumers need no purifier plugin to install them.
 
+`npmCaptureTool` can run on a modern helper Node while inspecting a project
+built for another Node. Set `NPM_PURIFIER_TARGET_NODE` to the target executable;
+the capture probes its version, ABI and platform using ES5 syntax. The graph's
+`targetRuntime` and `helperRuntime` remain separate. Native-addon identities
+include the target ABI, while incidental helper metadata does not identify a
+foreign package. The producer's installed tree remains authoritative; the
+helper does not resolve or reinstall dependencies.
+
 ### `rubygemsProjections`
 
 `rubygemsProjections { archives; producer; roots ? null; dependencies ? [];

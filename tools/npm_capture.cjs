@@ -14,7 +14,18 @@ const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const tarballName = name => name.replaceAll('@', '').replaceAll('/', '__') + '.tgz';
 
+function runtimeIdentity(executable) {
+  // This probe runs in the project's runtime, which may predate ES2015.
+  const result = JSON.parse(execFileSync(executable, ['-e',
+    'process.stdout.write(JSON.stringify({version:process.versions.node,abi:process.versions.modules || null,os:process.platform,cpu:process.arch}))'],
+    {encoding: 'utf8'}));
+  if (!/^\d+\.\d+\.\d+/.test(result.version) || !result.os || !result.cpu)
+    throw new Error('Cannot identify the selected project Node runtime');
+  return result;
+}
+
 async function capture(root, release, destination, ownPackages) {
+  const targetRuntime = runtimeIdentity(process.env.NPM_PURIFIER_TARGET_NODE || process.execPath);
   root = fs.realpathSync(root);
   const tree = await new Arborist({path: root}).loadActual();
   const candidates = new Map();
@@ -63,8 +74,10 @@ async function capture(root, release, destination, ownPackages) {
   const archives = path.join(destination, 'archives');
   fs.mkdirSync(archives, {recursive: true});
   fs.mkdirSync(path.join(destination, 'contents'), {recursive: true});
-  const output = {version: 1, os: process.platform, cpu: process.arch,
-    nodeMajor: Number(process.versions.node.split('.')[0]), primaries: {}, nodes: {}};
+  const output = {version: 1, os: targetRuntime.os, cpu: targetRuntime.cpu,
+    nodeMajor: Number(targetRuntime.version.split('.')[0]),
+    nodeVersion: targetRuntime.version, nodeAbi: targetRuntime.abi,
+    targetRuntime, helperRuntime: runtimeIdentity(process.execPath), primaries: {}, nodes: {}};
   for (const [node, pkg] of owned) output.primaries[pkg.name] = keyOf(node);
   for (const [key, {node, dependencies}] of nodes) {
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'npm-artifact-'));
